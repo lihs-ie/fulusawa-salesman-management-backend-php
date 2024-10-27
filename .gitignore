@@ -24,3 +24,4 @@ Homestead.json
 
 docker/nginx/logs
 docker/postgres
+.php-cs-fixer.cache
