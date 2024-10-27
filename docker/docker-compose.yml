@@ -1,5 +1,5 @@
 version: "3.8"
-name: fulusawa-salesman-management
+name: fulusawa-salesman-management-backend
 services:
   nginx:
     container_name: fulusawa-salesman-management-http
