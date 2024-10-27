@@ -1,0 +1,36 @@
+version: "3.8"
+name: fulusawa-salesman-management
+services:
+  nginx:
+    container_name: fulusawa-salesman-management-http
+    build:
+      context: ./nginx
+    depends_on:
+      - app
+    ports:
+      - 80:80
+    volumes:
+      - ../src:/src
+      - ./nginx/logs:/logs
+
+  app:
+    container_name: fulusawa-salesman-management-app
+    build:
+      context: ./app
+    depends_on:
+      - postgres
+    volumes:
+      - ../src:/src
+      - ./app/php.ini:/usr/local/etc/app/php.ini
+
+  postgres:
+    container_name: fulusawa-salesman-management-db
+    image: postgres
+    environment:
+      POSTGRES_DB: fulusawa
+      POSTGRES_PASSWORD: root
+      TZ: Asia/Tokyo
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
