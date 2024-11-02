@@ -1,5 +1,7 @@
 <?php
 
+namespace App\Domains\Customer;
+
 use App\Domains\Customer\Entities\Customer;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use Illuminate\Support\Enumerable;

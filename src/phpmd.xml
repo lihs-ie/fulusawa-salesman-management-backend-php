@@ -40,4 +40,23 @@
     <rule ref="rulesets/design.xml">
         <exclude name="CouplingBetweenObjects" />
     </rule>
+
+    <rule
+        name="PSR4"
+        message="Filename or FQCN is wrong. current namespace is `{fqcn}`."
+        class="Application\Rules\PSR4"
+        externalInfoUrl="https://www.php-fig.org/psr/psr-4"
+    >
+        <properties>
+            <property name="globalNamespacePrefix" value="+global" />
+            <property name="appNamespacePrefix" value="App" />
+            <property name="appPathPrefix" value="app" />
+            <property name="testsNamespacePrefix" value="Tests" />
+            <property name="testsPathPrefix" value="tests" />
+            <property name="rulesNamespacePrefix" value="Application\Rules" />
+            <property name="rulesPathPrefix" value="phpmd/Application/Rules" />
+        </properties>
+    </rule>
+
+    <php-includepath>phpmd</php-includepath>
 </ruleset>

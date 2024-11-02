@@ -3,7 +3,7 @@
 namespace App\Domains\User\ValueObjects;
 
 /**
- * ユーザーの権限を表す値オブジェクト
+ * ユーザー権限を表す値オブジェクト
  */
 enum Role
 {

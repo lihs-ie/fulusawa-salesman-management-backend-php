@@ -11,7 +11,7 @@ class PhoneNumber
 
     public const VALID_LOCAL_CODE_PATTERN = '/^\d{1,4}$/';
 
-    public const VALID_SUBSCRIBER_NUMBER_PATTERN = '/^\d{4,5}$/';
+    public const VALID_SUBSCRIBER_NUMBER_PATTERN = '/^\d{3,5}$/';
 
 
     public function __construct(
@@ -50,8 +50,8 @@ class PhoneNumber
     public function equals(PhoneNumber $other): bool
     {
         return $this->areaCode === $other->areaCode
-          && $this->localCode === $other->localCode
-          && $this->subscriberNumber === $other->subscriberNumber;
+            && $this->localCode === $other->localCode
+            && $this->subscriberNumber === $other->subscriberNumber;
     }
 
     public function __toString(): string

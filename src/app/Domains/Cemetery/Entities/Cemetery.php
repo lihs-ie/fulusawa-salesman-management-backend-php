@@ -11,6 +11,8 @@ use App\Domains\Customer\ValueObjects\CustomerIdentifier;
  */
 class Cemetery
 {
+    private const MAX_NAME_LENGTH = 255;
+
     public function __construct(
         public readonly CemeteryIdentifier $identifier,
         public readonly CustomerIdentifier $customer,
@@ -19,8 +21,8 @@ class Cemetery
         public readonly \DateTimeInterface $construction,
         public readonly bool $inHouse,
     ) {
-        if ($name === '') {
-            throw new \InvalidArgumentException('Name must not be empty.');
+        if ($name === '' || static::MAX_NAME_LENGTH < mb_strlen($name)) {
+            throw new \InvalidArgumentException('Name must be between 1 and ' . static::MAX_NAME_LENGTH . ' characters');
         }
     }
 

@@ -11,5 +11,7 @@ enum FeedbackType
 
     case PROBLEM;
 
+    case QUESTION;
+
     case OTHER;
 }

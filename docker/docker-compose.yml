@@ -21,7 +21,7 @@ services:
       - postgres
     volumes:
       - ../src:/src
-      - ./app/php.ini:/usr/local/etc/app/php.ini
+      - ./app/php.ini:/usr/local/etc/php/php.ini
 
   postgres:
     container_name: fulusawa-salesman-management-db
