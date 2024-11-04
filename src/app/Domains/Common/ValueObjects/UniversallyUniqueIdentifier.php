@@ -7,7 +7,7 @@ namespace App\Domains\Common\ValueObjects;
  */
 abstract class UniversallyUniqueIdentifier
 {
-    public const VALID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    public const VALID_PATTERN = '/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-7[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/';
 
     public function __construct(public readonly string $value)
     {

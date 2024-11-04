@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Domains\DailyReport\Entities;
+namespace App\Domains\DailyReport;
 
+use App\Domains\DailyReport\Entities\DailyReport;
 use App\Domains\DailyReport\ValueObjects\Criteria;
 use App\Domains\DailyReport\ValueObjects\DailyReportIdentifier;
 use Illuminate\Support\Enumerable;

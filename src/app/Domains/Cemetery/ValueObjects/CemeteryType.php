@@ -8,7 +8,10 @@ namespace App\Domains\Cemetery\ValueObjects;
 enum CemeteryType
 {
     case INDIVIDUAL;
+
     case FAMILY;
+
     case COMMUNITY;
+
     case OTHER;
 }

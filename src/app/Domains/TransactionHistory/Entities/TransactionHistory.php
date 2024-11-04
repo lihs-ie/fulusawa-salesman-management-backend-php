@@ -18,7 +18,7 @@ class TransactionHistory
     public function __construct(
         public readonly TransactionHistoryIdentifier $identifier,
         public readonly CustomerIdentifier $customer,
-        public readonly UserIdentifier $salesman,
+        public readonly UserIdentifier $user,
         public readonly TransactionType $type,
         public readonly string|null $description,
         public readonly \DateTimeInterface $date,
@@ -45,9 +45,9 @@ class TransactionHistory
         return $this->customer;
     }
 
-    public function salesman(): UserIdentifier
+    public function user(): UserIdentifier
     {
-        return $this->salesman;
+        return $this->user;
     }
 
     public function type(): TransactionType
@@ -75,7 +75,7 @@ class TransactionHistory
             return false;
         }
 
-        if (!$this->salesman->equals($other->salesman)) {
+        if (!$this->user->equals($other->user)) {
             return false;
         }
 

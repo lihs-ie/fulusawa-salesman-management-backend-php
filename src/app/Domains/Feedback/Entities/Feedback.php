@@ -18,7 +18,8 @@ class Feedback
         public readonly FeedbackType $type,
         public readonly FeedbackStatus $status,
         public readonly string $content,
-        public readonly string $createdAt,
+        public readonly \DateTimeInterface $createdAt,
+        public readonly \DateTimeInterface $updatedAt,
     ) {
 
         if (static::MAX_CONTENT_LENGTH < mb_strlen($content)) {
@@ -49,9 +50,14 @@ class Feedback
         return $this->content;
     }
 
-    public function createdAt(): string
+    public function createdAt(): \DateTimeInterface
     {
         return $this->createdAt;
+    }
+
+    public function updatedAt(): \DateTimeInterface
+    {
+        return $this->updatedAt;
     }
 
     public function equals(Feedback $other): bool
@@ -72,7 +78,11 @@ class Feedback
             return false;
         }
 
-        if ($this->createdAt !== $other->createdAt) {
+        if ($this->createdAt->toAtomString() !== $other->createdAt->toAtomString()) {
+            return false;
+        }
+
+        if ($this->updatedAt->toAtomString() !== $other->updatedAt->toAtomString()) {
             return false;
         }
 

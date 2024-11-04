@@ -26,7 +26,7 @@ class Schedule
         public readonly string|null $description,
         public readonly DateTimeRange $date,
         public readonly ScheduleStatus $status,
-        public readonly RepeatFrequency $repeat,
+        public readonly RepeatFrequency|null $repeat,
     ) {
         if (static::MAX_TITLE_LENGTH < mb_strlen($title)) {
             throw new \InvalidArgumentException(\sprintf(
@@ -78,7 +78,7 @@ class Schedule
         return $this->status;
     }
 
-    public function repeat(): RepeatFrequency
+    public function repeat(): RepeatFrequency|null
     {
         return $this->repeat;
     }
@@ -90,6 +90,7 @@ class Schedule
      * @return boolean
      *
      * @SuppressWarnings(PHPMD.NPathComplexity)
+     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
      */
     public function equals(Schedule $other): bool
     {
@@ -126,6 +127,10 @@ class Schedule
         }
 
         if ($this->status !== $other->status) {
+            return false;
+        }
+
+        if (\is_null($this->repeat) && !\is_null($other->repeat)) {
             return false;
         }
 

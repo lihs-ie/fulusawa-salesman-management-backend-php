@@ -7,7 +7,7 @@ namespace App\Domains\Schedule\ValueObjects;
  */
 class RepeatFrequency
 {
-    private const WEEK = 7;
+    private const DAYS_IN_A_WEEK = 7;
 
     public function __construct(
         public readonly FrequencyType $type,
@@ -47,7 +47,7 @@ class RepeatFrequency
 
         return match ($this->type) {
             FrequencyType::DAILY  => $next->modify(\sprintf('+%d days', $this->interval)),
-            FrequencyType::WEEKLY => $next->modify(\sprintf('+%d days', ($this->interval * static::WEEK))),
+            FrequencyType::WEEKLY => $next->modify(\sprintf('+%d days', ($this->interval * static::DAYS_IN_A_WEEK))),
             FrequencyType::MONTHLY => $next->modify(\sprintf('+%d months', $this->interval)),
             FrequencyType::YEARLY => $next->modify(\sprintf('+%d years', $this->interval)),
         };
