@@ -3,6 +3,7 @@
 namespace Tests\Support\Factories\Domains\Authentication\ValueObjects;
 
 use App\Domains\Authentication\ValueObjects\Token;
+use App\Domains\Authentication\ValueObjects\TokenType;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Hash;
 use Ramsey\Uuid\Uuid;
@@ -23,6 +24,7 @@ class TokenFactory extends DependencyFactory
         $valueSuffix = $overrides['valueSuffix'] ?? Hash::make(\abs($seed) * 1000);
 
         return new Token(
+            type: $overrides['type'] ?? $builder->create(TokenType::class, $seed, $overrides),
             value: $overrides['value'] ?? "{$valuePrefix}|{$valueSuffix}",
             expiresAt: $overrides['expiresAt'] ?? CarbonImmutable::now()->addMinutes(\abs($seed % 2 * 10))
         );
@@ -38,6 +40,7 @@ class TokenFactory extends DependencyFactory
         }
 
         return new Token(
+            type: $overrides['type'] ?? $instance->type(),
             value: $overrides['value'] ?? $instance->value(),
             expiresAt: $overrides['expiresAt'] ?? $instance->expiresAt()
         );

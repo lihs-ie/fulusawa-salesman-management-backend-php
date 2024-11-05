@@ -21,9 +21,7 @@ trait RefreshDatabase
         $config = $this->app[ConfigRepository::class];
 
         foreach (
-            [
-                $config->get('database.connections.testing') => 'default',
-            ] as $database => $dir
+            [$config->get('database.connections.testing') => 'default'] as $database => $dir
         ) {
             $this->artisan('migrate', [
                 '--database' => $database,

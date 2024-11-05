@@ -18,7 +18,6 @@ class Customer
 
     private const MAX_FIRST_NAME_LENGTH = 50;
 
-
     public function __construct(
         public readonly CustomerIdentifier $identifier,
         public readonly string $lastName,
@@ -90,8 +89,20 @@ class Customer
         return $this->transactionHistories;
     }
 
-    public function equals(Customer $other): bool
+    /**
+     * 与えられた値が自信と同一か判定する
+     *
+     * @param Customer|null $other
+     * @return boolean
+     *
+     * @SuppressWarnings(PHPMD.NPathComplexity)
+     */
+    public function equals(?Customer $other): bool
     {
+        if (is_null($other)) {
+            return false;
+        }
+
         if (!$this->identifier->equals($other->identifier)) {
             return false;
         }

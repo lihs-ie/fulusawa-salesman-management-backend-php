@@ -18,9 +18,10 @@ use Illuminate\Support\Enumerable;
  */
 class Feedback
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly FeedbackRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 
@@ -120,9 +121,9 @@ class Feedback
      */
     private function createCriteria(array $conditions): Criteria
     {
-        $status = $this->factory->extractString($conditions, 'status');
-        $type = $this->factory->extractString($conditions, 'type');
-        $sort = $this->factory->extractString($conditions, 'sort');
+        $status = $this->extractString($conditions, 'status');
+        $type = $this->extractString($conditions, 'type');
+        $sort = $this->extractString($conditions, 'sort');
 
         return new Criteria(
             status: \is_null($status) ? null : $this->convertStatus($status),

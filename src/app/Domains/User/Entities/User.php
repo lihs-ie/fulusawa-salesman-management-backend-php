@@ -19,8 +19,9 @@ class User
         public readonly string $lastName,
         public readonly Address $address,
         public readonly PhoneNumber $phone,
-        public readonly MailAddress $mail,
-        public readonly Role $role
+        public readonly MailAddress $email,
+        public readonly string $password,
+        public readonly Role $role,
     ) {
         if ($firstName === '') {
             throw new \InvalidArgumentException('First name must not be empty');
@@ -56,9 +57,14 @@ class User
         return $this->phone;
     }
 
-    public function mail(): MailAddress
+    public function email(): MailAddress
     {
-        return $this->mail;
+        return $this->email;
+    }
+
+    public function password(): string
+    {
+        return $this->password;
     }
 
     public function role(): Role
@@ -66,8 +72,20 @@ class User
         return $this->role;
     }
 
-    public function equals(User $other): bool
+    /**
+     * 与えられた値が自信と同一か判定する
+     *
+     * @param self|null $other
+     * @return boolean
+     *
+     * @SuppressWarnings(PHPMD.NPathComplexity)
+     */
+    public function equals(?self $other): bool
     {
+        if (\is_null($other)) {
+            return false;
+        }
+
         if (!$this->identifier->equals($other->identifier)) {
             return false;
         }
@@ -88,7 +106,11 @@ class User
             return false;
         }
 
-        if (!$this->mail->equals($other->mail)) {
+        if (!$this->email->equals($other->email)) {
+            return false;
+        }
+
+        if ($this->password !== $other->password) {
             return false;
         }
 

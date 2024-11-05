@@ -16,9 +16,10 @@ use Illuminate\Support\Enumerable;
  */
 class Cemetery
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly CemeteryRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 

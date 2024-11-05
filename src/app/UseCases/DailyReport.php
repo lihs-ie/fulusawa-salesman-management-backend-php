@@ -19,9 +19,10 @@ use Illuminate\Support\Enumerable;
  */
 class DailyReport
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly DailyReportRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 
@@ -126,13 +127,13 @@ class DailyReport
     private function inflateCriteria(array $conditions): Criteria
     {
         $date = (isset($conditions['date']))
-            ? $this->factory->extractDateTimeRange($conditions['date']) : null;
+            ? $this->extractDateTimeRange($conditions['date']) : null;
 
         $user = (isset($conditions['user']))
-            ? new UserIdentifier($this->factory->extractString($conditions, 'user')) : null;
+            ? new UserIdentifier($this->extractString($conditions, 'user')) : null;
 
         $isSubmitted = (isset($conditions['isSubmitted']))
-            ? $this->factory->extractBoolean($conditions, 'isSubmitted') : null;
+            ? $this->extractBoolean($conditions, 'isSubmitted') : null;
 
         return new Criteria(
             date: $date,

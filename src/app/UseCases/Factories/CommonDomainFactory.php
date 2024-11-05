@@ -8,12 +8,11 @@ use App\Domains\Common\ValueObjects\PhoneNumber;
 use App\Domains\Common\ValueObjects\PostalCode;
 use App\Domains\Common\ValueObjects\Prefecture;
 use Carbon\CarbonImmutable;
-use Ramsey\Uuid\Uuid;
 
 /**
  * 共通ドメインの値を抽出する
  */
-class CommonDomainFactory
+trait CommonDomainFactory
 {
     /**
      * 配列から住所を取り出す
@@ -21,7 +20,7 @@ class CommonDomainFactory
      * @param array $address
      * @return Address
      */
-    public function extractAddress(array $address): Address
+    protected function extractAddress(array $address): Address
     {
         $postalCode = $this->extractPostalCode($this->extractArray($address, 'postalCode'));
         $prefecture = Prefecture::from($this->extractInteger($address, 'prefecture'));
@@ -41,7 +40,7 @@ class CommonDomainFactory
      * @param array $postalCode
      * @return PostalCode
      */
-    public function extractPostalCode(array $postalCode): PostalCode
+    protected function extractPostalCode(array $postalCode): PostalCode
     {
         return new PostalCode(
             first: $this->extractString($postalCode, 'first'),
@@ -55,7 +54,7 @@ class CommonDomainFactory
      * @param array $phone
      * @return PhoneNumber
      */
-    public function extractPhone(array $phone): PhoneNumber
+    protected function extractPhone(array $phone): PhoneNumber
     {
         return new PhoneNumber(
             areaCode: $this->extractString($phone, 'areaCode'),
@@ -70,7 +69,7 @@ class CommonDomainFactory
      * @param array $range
      * @return DateTimeRange
      */
-    public function extractDateTimeRange(array $range): DateTimeRange|null
+    protected function extractDateTimeRange(array $range): DateTimeRange|null
     {
         $start = $this->extractString($range, 'start');
         $end = $this->extractString($range, 'end');
@@ -92,7 +91,7 @@ class CommonDomainFactory
      * @param string $key
      * @return mixed
      */
-    public function extractString(array $conditions, string $key): mixed
+    protected function extractString(array $conditions, string $key): mixed
     {
         if (!isset($conditions[$key])) {
             return null;
@@ -108,7 +107,7 @@ class CommonDomainFactory
      * @param string $key
      * @return int|null
      */
-    public function extractInteger(array $conditions, string $key): int|null
+    protected function extractInteger(array $conditions, string $key): int|null
     {
         $target = isset($conditions[$key]) ? $conditions[$key] : null;
 
@@ -130,7 +129,7 @@ class CommonDomainFactory
      * @param string $key
      * @return array|null
      */
-    public function extractArray(array $conditions, string $key): array|null
+    protected function extractArray(array $conditions, string $key): array|null
     {
         $target = isset($conditions[$key]) ? $conditions[$key] : null;
 
@@ -152,7 +151,7 @@ class CommonDomainFactory
      * @param string $key
      * @return bool|null
      */
-    public function extractBoolean(array $conditions, string $key): bool|null
+    protected function extractBoolean(array $conditions, string $key): bool|null
     {
         $target = $this->extractString($conditions, $key);
 

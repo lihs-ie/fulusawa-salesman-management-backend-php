@@ -20,9 +20,10 @@ use Ramsey\Uuid\Uuid;
  */
 class Schedule
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly ScheduleRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 
@@ -57,7 +58,7 @@ class Schedule
             customer: \is_null($customer) ? null : new CustomerIdentifier($customerValue),
             title: $title,
             description: $description,
-            date: $this->factory->extractDateTimeRange($date),
+            date: $this->extractDateTimeRange($date),
             status: $this->convertStatus($status),
             repeat: $repeatFrequency ? $this->extractRepeatFrequency($repeatFrequency) : null
         );
@@ -132,7 +133,7 @@ class Schedule
      */
     private function extractRepeatFrequency(array $repeatFrequency): RepeatFrequency
     {
-        $type = match ($this->factory->extractString($repeatFrequency, 'type')) {
+        $type = match ($this->extractString($repeatFrequency, 'type')) {
             '1' => FrequencyType::DAILY,
             '2' => FrequencyType::WEEKLY,
             '3' => FrequencyType::MONTHLY,
@@ -141,7 +142,7 @@ class Schedule
 
         return new RepeatFrequency(
             type: $type,
-            interval: $this->factory->extractInteger($repeatFrequency, 'interval')
+            interval: $this->extractInteger($repeatFrequency, 'interval')
         );
     }
 
@@ -154,15 +155,15 @@ class Schedule
     private function createCriteria(array $conditions): Criteria
     {
         $status = isset($conditions['status']) ?
-            $this->convertStatus($this->factory->extractString($conditions, 'status')) : null;
+            $this->convertStatus($this->extractString($conditions, 'status')) : null;
 
         $date = isset($conditions['date']) ?
-            $this->factory->extractDateTimeRange($this->factory->extractArray($conditions, 'date')) : null;
+            $this->extractDateTimeRange($this->extractArray($conditions, 'date')) : null;
 
         return new Criteria(
             status: $status,
             date: $date,
-            title: $this->factory->extractString($conditions, 'title')
+            title: $this->extractString($conditions, 'title')
         );
     }
 }

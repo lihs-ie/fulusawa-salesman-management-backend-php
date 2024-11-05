@@ -6,6 +6,7 @@ use App\Domains\Authentication\AuthenticationRepository;
 use App\Domains\Authentication\Entities\Authentication as Entity;
 use App\Domains\Authentication\ValueObjects\AuthenticationIdentifier;
 use App\Domains\Authentication\ValueObjects\Token;
+use App\Domains\Authentication\ValueObjects\TokenType;
 use App\Domains\Common\ValueObjects\MailAddress;
 use App\UseCases\Factories\CommonDomainFactory;
 use Carbon\CarbonImmutable;
@@ -16,9 +17,10 @@ use Illuminate\Support\Enumerable;
  */
 class Authentication
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly AuthenticationRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 
@@ -26,58 +28,50 @@ class Authentication
      * アクセストークンを発行・永続化する
      *
      * @param string $identifier
-     * @param string $mail
+     * @param string $email
      * @param string $password
      * @return string
      */
-    public function persist(string $identifier, string $mail, string $password): Entity
+    public function persist(string $identifier, string $email, string $password): Entity
     {
         return $this->repository->persist(
             identifier: new AuthenticationIdentifier($identifier),
-            mail: new MailAddress($mail),
+            email: new MailAddress($email),
             password: $password
         );
     }
 
     /**
-     * 認証が有効かどうかを検証する
+     * トークンが有効か検証する
      *
-     * @param string $identifier
-     * @param array $accessToken
-     * @param array $refreshToken
-     * @return Enumerable
+     * @param array $token
+     * @return bool
      */
-    public function introspection(string $identifier, array $accessToken, array $refreshToken): Enumerable
+    public function introspection(array $token): bool
     {
-        $entity = new Entity(
-            identifier: new AuthenticationIdentifier($identifier),
-            accessToken: $this->extractToken($accessToken),
-            refreshToken: $this->extractToken($refreshToken)
-        );
-
-        return $this->repository->introspection($entity);
+        return $this->repository->introspection($this->extractToken($token));
     }
 
     /**
      * アクセストークンを更新する
      *
-     * @param string $identifier
+     * @param array $token
      * @return Entity
      */
-    public function refresh(string $identifier): Entity
+    public function refresh(array $token): Entity
     {
-        return $this->repository->refresh(new AuthenticationIdentifier($identifier));
+        return $this->repository->refresh($this->extractToken($token));
     }
 
     /**
      * アクセストークンを破棄する
      *
-     * @param string $identifier
+     * @param array $token
      * @return void
      */
-    public function revoke(string $identifier): void
+    public function revoke(array $token): void
     {
-        $this->repository->revoke(new AuthenticationIdentifier($identifier));
+        $this->repository->revoke($this->extractToken($token));
     }
 
     /**
@@ -88,7 +82,13 @@ class Authentication
      */
     private function extractToken(array $token): Token
     {
+        $type = match ($token['type']) {
+            TokenType::ACCESS->name => TokenType::ACCESS,
+            TokenType::REFRESH->name => TokenType::REFRESH,
+        };
+
         return new Token(
+            type: $type,
             value: $token['value'],
             expiresAt: CarbonImmutable::parse($token['expiresAt'])
         );

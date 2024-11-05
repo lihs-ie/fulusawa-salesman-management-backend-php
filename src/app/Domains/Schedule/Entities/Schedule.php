@@ -14,9 +14,9 @@ use App\Domains\User\ValueObjects\UserIdentifier;
  */
 class Schedule
 {
-    private const MAX_TITLE_LENGTH = 255;
+    public const MAX_TITLE_LENGTH = 255;
 
-    private const MAX_DESCRIPTION_LENGTH = 1000;
+    public const MAX_DESCRIPTION_LENGTH = 1000;
 
     public function __construct(
         public readonly ScheduleIdentifier $identifier,

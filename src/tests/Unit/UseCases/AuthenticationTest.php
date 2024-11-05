@@ -5,6 +5,7 @@ namespace Tests\Unit\UseCases;
 use App\Domains\Authentication\AuthenticationRepository;
 use App\Domains\Authentication\Entities\Authentication as Entity;
 use App\Domains\Authentication\ValueObjects\Token;
+use App\Domains\Authentication\ValueObjects\TokenType;
 use App\Domains\Common\ValueObjects\MailAddress;
 use App\UseCases\Authentication as UseCase;
 use App\UseCases\Factories\CommonDomainFactory;
@@ -44,7 +45,7 @@ class AuthenticationTest extends TestCase
      */
     public function testPersistSuccessInCaseOnCreate(): void
     {
-        $mail = $this->builder()->create(MailAddress::class);
+        $email = $this->builder()->create(MailAddress::class);
         $password = 'test-password';
 
         $expected = $this->builder()->create(Entity::class);
@@ -53,7 +54,7 @@ class AuthenticationTest extends TestCase
 
         $actual = $useCase->persist(
             identifier: $expected->identifier()->value(),
-            mail: $mail->value(),
+            email: $email->value(),
             password: $password
         );
 
@@ -61,13 +62,13 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * @testdox testIntrospectionSuccessWithValidAuthentication introspectionメソッドで有効な認証を与えた時にtrueを返すこと.
+     * @testdox testIntrospectionSuccessWithValidAccessToken introspectionメソッドで有効なアクセストークンを与えた時にtrueを返すこと.
      */
-    public function testIntrospectionSuccessWithValidAuthentication(): void
+    public function testIntrospectionSuccessWithValidAccessToken(): void
     {
         $instance = $this->builder()->create(Entity::class, null, [
-          'accessToken' => $this->builder()->create(Token::class, null, ['expiresAt' => now()->addHour()]),
-          'refreshToken' => $this->builder()->create(Token::class, null, ['expiresAt' => now()->addHour()]),
+            'accessToken' => $this->createToken(TokenType::ACCESS, now()->addHour()),
+            'refreshToken' => $this->createToken(TokenType::REFRESH, now()->addHour()),
         ]);
 
         $this->instances = clone $this->instances->concat([$instance]);
@@ -78,24 +79,43 @@ class AuthenticationTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($instance);
 
-        $actual = $useCase->introspection(
-            identifier: $parameters['identifier'],
-            accessToken: $parameters['accessToken'],
-            refreshToken: $parameters['refreshToken']
-        );
+        $actual = $useCase->introspection(token: $parameters['accessToken']);
 
-        $this->assertTrue($actual->get('accessToken')['active']);
-        $this->assertTrue($actual->get('refreshToken')['active']);
+        $this->assertTrue($actual);
     }
 
     /**
-     * @testdox testIntrospectionSuccessWithExpiredAccessToken introspectionメソッドで有効期限切れのアクセストークンを与えた時にfalseを返すこと.
+     * @testdox testIntrospectionSuccessWithValidRefreshToken introspectionメソッドで有効なリフレッシュトークンを与えた時にtrueを返すこと.
      */
-    public function testIntrospectionSuccessWithExpiredAuthentication(): void
+    public function testIntrospectionSuccessfulReturnsTrueWithValidRefreshToken(): void
     {
         $instance = $this->builder()->create(Entity::class, null, [
-          'accessToken' => $this->builder()->create(Token::class, null, ['expiresAt' => now()->subHour()]),
-          'refreshToken' => $this->builder()->create(Token::class, null, ['expiresAt' => now()->addHour()]),
+            'accessToken' => $this->createToken(TokenType::ACCESS, now()->addHour()),
+            'refreshToken' => $this->createToken(TokenType::REFRESH, now()->addHour()),
+        ]);
+
+        $this->instances = clone $this->instances->concat([$instance]);
+
+        [$useCase] = $this->createPersistUseCase();
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($instance);
+
+        $actual = $useCase->introspection(token: $parameters['refreshToken']);
+
+        $this->assertTrue($actual);
+    }
+
+    /**
+     * @testdox testIntrospectionSuccessReturnsFalseWithExpiredAccessToken introspectionメソッドで有効期限切れのアクセストークンを与えた時にfalseを返すこと.
+     */
+    public function testIntrospectionSuccessReturnsFalseWithExpiredAccessToken(): void
+    {
+        $expired = $this->createToken(TokenType::ACCESS, now()->subHour());
+
+        $instance = $this->builder()->create(Entity::class, null, [
+            'accessToken' => $expired,
         ]);
 
         $this->instances = clone $this->instances->concat([$instance]);
@@ -104,30 +124,49 @@ class AuthenticationTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($instance);
 
-        $actual = $useCase->introspection(
-            identifier: $parameters['identifier'],
-            accessToken: $parameters['accessToken'],
-            refreshToken: $parameters['refreshToken']
-        );
+        $actual = $useCase->introspection(token: $parameters['accessToken']);
 
-        $this->assertFalse($actual->get('accessToken')['active']);
-        $this->assertTrue($actual->get('refreshToken')['active']);
+        $this->assertFalse($actual);
     }
 
     /**
-     * @testdox testRefreshSuccess refreshメソッドで認証を更新できること.
+     * @testdox testIntrospectionSuccessReturnsFalseWithExpiredRefreshToken introspectionメソッドで有効期限切れのリフレッシュトークンを与えた時にfalseを返すこと.
      */
-    public function testRefreshSuccess(): void
+    public function testIntrospectionSuccessReturnsFalseWithExpiredRefreshToken(): void
+    {
+        $expired = $this->createToken(TokenType::REFRESH, now()->subHour());
+
+        $instance = $this->builder()->create(Entity::class, null, [
+            'refreshToken' => $expired,
+        ]);
+
+        $this->instances = clone $this->instances->concat([$instance]);
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($instance);
+
+        $actual = $useCase->introspection(token: $parameters['refreshToken']);
+
+        $this->assertFalse($actual);
+    }
+
+    /**
+     * @testdox testRefreshSuccessfulReturnsRefreshedAuthentication refreshメソッドで認証を更新できること.
+     */
+    public function testRefreshSuccessfulReturnsRefreshedAuthentication(): void
     {
         $existence = $this->builder()->create(Entity::class, null, [
-          'refreshToken' => $this->builder()->create(Token::class, null, ['expiresAt' => now()->addHour()]),
+            'refreshToken' => $this->createToken(TokenType::REFRESH, now()->addHour()),
         ]);
 
         $this->instances = clone $this->instances->concat([$existence]);
 
         [$useCase] = $this->createPersistUseCase();
 
-        $actual = $useCase->refresh($existence->identifier()->value());
+        $parameters = $this->createParametersFromEntity($existence);
+
+        $actual = $useCase->refresh($parameters['refreshToken']);
 
         $this->assertTrue($existence->identifier()->equals($actual->identifier()));
         $this->assertFalse($existence->accessToken()->equals($actual->accessToken()));
@@ -135,7 +174,7 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * @testdox testRevokeSuccess revokeメソッドで認証を削除できること.
+     * @testdox testRevokeSuccess revokeメソッドで指定したトークンを破棄できること.
      */
     public function testRevokeSuccess(): void
     {
@@ -143,20 +182,24 @@ class AuthenticationTest extends TestCase
 
         [$removed, $onRemove] = $this->createRemoveHandler();
 
+        $parameters = $this->createParametersFromEntity($target);
+
         $useCase = new UseCase(
             repository: $this->builder()->create(
                 AuthenticationRepository::class,
                 null,
                 ['instances' => $this->instances, 'onRemove' => $onRemove]
             ),
-            factory: new CommonDomainFactory(),
         );
 
-        $useCase->revoke($target->identifier()->value());
+        $useCase->revoke($parameters['accessToken']);
 
-        $removed->each(function (Entity $instance) use ($target): void {
-            $this->assertFalse($instance->identifier()->equals($target->identifier()));
-        });
+        $actual = $removed->first(
+            fn (Entity $entity): bool => $entity->identifier()->equals($target->identifier())
+        );
+
+        $this->assertNotNull($actual);
+        $this->assertNull($actual->accessToken());
     }
 
     /**
@@ -172,7 +215,6 @@ class AuthenticationTest extends TestCase
                 null,
                 ['onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -191,7 +233,6 @@ class AuthenticationTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -205,6 +246,7 @@ class AuthenticationTest extends TestCase
         $this->assertInstanceOf(Entity::class, $expected);
         $this->assertInstanceOf(Entity::class, $actual);
         $this->assertTrue($expected->identifier()->equals($actual->identifier()));
+        $this->assertTrue($expected->user()->equals($actual->user()));
         $this->assertTrue($expected->accessToken()->equals($actual->accessToken()));
         $this->assertTrue($expected->refreshToken()->equals($actual->refreshToken()));
     }
@@ -218,20 +260,31 @@ class AuthenticationTest extends TestCase
     }
 
     /**
+     * テストに使用するトークンを生成するへルパ.
+     */
+    private function createToken(TokenType $type, \DateTimeInterface $expiresAt): Token
+    {
+        return $this->builder()->create(Token::class, null, ['type' => $type, 'expiresAt' => $expiresAt]);
+    }
+
+    /**
      * エンティティからintrospectionメソッドに使用するパラメータを生成するへルパ.
      */
     private function createParametersFromEntity(Entity $entity): array
     {
         return [
-          'identifier' => $entity->identifier()->value(),
-          'accessToken' => [
-            'value' => $entity->accessToken()->value(),
-            'expiresAt' => $entity->accessToken()->expiresAt()->toAtomString(),
-          ],
-          'refreshToken' => [
-            'value' => $entity->refreshToken()->value(),
-            'expiresAt' => $entity->refreshToken()->expiresAt()->toAtomString(),
-          ],
+            'identifier' => $entity->identifier()->value(),
+            'user' => $entity->user()->value(),
+            'accessToken' => [
+                'type' => $entity->accessToken()->type()->name,
+                'value' => $entity->accessToken()->value(),
+                'expiresAt' => $entity->accessToken()->expiresAt()->toAtomString(),
+            ],
+            'refreshToken' => [
+                'type' => $entity->refreshToken()->type()->name,
+                'value' => $entity->refreshToken()->value(),
+                'expiresAt' => $entity->refreshToken()->expiresAt()->toAtomString(),
+            ],
         ];
     }
 }
