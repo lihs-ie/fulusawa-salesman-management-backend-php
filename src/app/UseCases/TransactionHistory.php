@@ -118,13 +118,13 @@ class TransactionHistory
     private function convertTransactionType(string $type): TransactionType
     {
         return match ($type) {
-            '1' => TransactionType::MAINTENANCE,
-            '2' => TransactionType::CLEANING,
-            '3' => TransactionType::GRAVESTONE_INSTALLATION,
-            '4' => TransactionType::GRAVESTONE_REMOVAL,
-            '5' => TransactionType::GRAVESTONE_REPLACEMENT,
-            '6' => TransactionType::GRAVESTONE_REPAIR,
-            '99' => TransactionType::OTHER,
+            TransactionType::MAINTENANCE->name => TransactionType::MAINTENANCE,
+            TransactionType::CLEANING->name => TransactionType::CLEANING,
+            TransactionType::GRAVESTONE_INSTALLATION->name => TransactionType::GRAVESTONE_INSTALLATION,
+            TransactionType::GRAVESTONE_REMOVAL->name => TransactionType::GRAVESTONE_REMOVAL,
+            TransactionType::GRAVESTONE_REPLACEMENT->name => TransactionType::GRAVESTONE_REPLACEMENT,
+            TransactionType::GRAVESTONE_REPAIR->name => TransactionType::GRAVESTONE_REPAIR,
+            TransactionType::OTHER->name => TransactionType::OTHER,
         };
     }
 }

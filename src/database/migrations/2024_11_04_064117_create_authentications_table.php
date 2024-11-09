@@ -15,9 +15,9 @@ return new class () extends Migration {
             $table->string('tokenable_id');
             $table->string('tokenable_type');
             $table->string('name');
-            $table->string('access_token', 64)->unique()->nullable();
-            $table->timestamp('access_token_expires_at')->nullable();
-            $table->string('refresh_token')->unique()->nullable();
+            $table->string('token', 64)->unique()->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->string('refresh_token', 64)->unique()->nullable();
             $table->timestamp('refresh_token_expires_at')->nullable();
             $table->text('abilities')->nullable();
             $table->timestamp('last_used_at')->nullable();

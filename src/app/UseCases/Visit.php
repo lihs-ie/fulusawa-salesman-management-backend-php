@@ -112,8 +112,8 @@ class Visit
     private function convertVisitResult(string $result): VisitResult
     {
         return match ($result) {
-            '0' => VisitResult::NO_CONTRACT,
-            '1' => VisitResult::CONTRACT,
+            VisitResult::NO_CONTRACT->name => VisitResult::NO_CONTRACT,
+            VisitResult::CONTRACT->name => VisitResult::CONTRACT,
         };
     }
 }

@@ -5,6 +5,7 @@ namespace Tests\Support\Factories\Domains\Cemetery;
 use App\Domains\Cemetery\CemeteryRepository;
 use App\Domains\Cemetery\Entities\Cemetery;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
+use App\Domains\Cemetery\ValueObjects\Criteria;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use Closure;
 use Illuminate\Support\Enumerable;
@@ -71,19 +72,12 @@ class CemeteryRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function ofCustomer(CustomerIdentifier $customer): Enumerable
+            public function list(Criteria $criteria): Enumerable
             {
-                return $this->instances->filter(
-                    fn (Cemetery $cemetery): bool => $cemetery->customer()->equals($customer)
-                );
-            }
-
-            /**
-             * {@inheritdoc}
-             */
-            public function list(): Enumerable
-            {
-                return clone $this->instances;
+                return clone $this->instances
+                    ->when(!\is_null($criteria->customer), fn (Enumerable $collection) => $collection->filter(
+                        fn (Cemetery $cemetery): bool => $criteria->customer()->equals($cemetery->customer)
+                    ));
             }
 
             /**

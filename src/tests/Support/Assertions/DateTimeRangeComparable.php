@@ -2,7 +2,7 @@
 
 namespace Tests\Support\Assertions;
 
-use Apollo\Shopping\Domains\Common\ValueObjects\DateTimeRange;
+use App\Domains\Common\ValueObjects\DateTimeRange;
 
 /**
  * 日時範囲の比較を行う機能.

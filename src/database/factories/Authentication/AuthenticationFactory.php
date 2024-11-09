@@ -2,6 +2,7 @@
 
 namespace Database\Factories\Authentication;
 
+use App\Domains\User\ValueObjects\Role;
 use App\Infrastructures\User\Models\User;
 use Carbon\CarbonImmutable;
 use Database\Factories\User\UserFactory;
@@ -22,8 +23,8 @@ class AuthenticationFactory extends Factory
             'tokenable_id' => new UserFactory(),
             'tokenable_type' => User::class,
             'name' => $this->faker->name(),
-            'access_token' => $this->faker->sha256(),
-            'access_token_expires_at' => $this->faker->dateTime(),
+            'token' => $this->faker->sha256(),
+            'expires_at' => $this->faker->dateTime(),
             'refresh_token' => $this->faker->sha256(),
             'refresh_token_expires_at' => $this->faker->dateTime(),
             'abilities' => null,
@@ -34,7 +35,7 @@ class AuthenticationFactory extends Factory
     public function bothValid(): static
     {
         return $this->state(fn (): array => [
-            'access_token_expires_at' => CarbonImmutable::now()->addHour()->toAtomString(),
+            'expires_at' => CarbonImmutable::now()->addHour()->toAtomString(),
             'refresh_token_expires_at' => CarbonImmutable::now()->addDay()->toAtomString()
         ]);
     }
@@ -42,8 +43,20 @@ class AuthenticationFactory extends Factory
     public function bothExpired(): static
     {
         return $this->state(fn (): array => [
-            'access_token_expires_at' => CarbonImmutable::now()->subHour()->toAtomString(),
+            'expires_at' => CarbonImmutable::now()->subHour()->toAtomString(),
             'refresh_token_expires_at' => CarbonImmutable::now()->subHour()->toAtomString()
+        ]);
+    }
+
+    public function roleOf(Role $role = Role::ADMIN): static
+    {
+        $user = User::factory()->roleOf($role)->create();
+
+        return $this->state(fn (): array => [
+            'tokenable_id' => $user->identifier,
+            'expires_at' => CarbonImmutable::now()->addDays(\mt_rand(1, 3))->toAtomString(),
+            'refresh_token_expires_at' => CarbonImmutable::now()->addDays(\mt_rand(1, 3))->toAtomString(),
+            'abilities' => $user->role
         ]);
     }
 }

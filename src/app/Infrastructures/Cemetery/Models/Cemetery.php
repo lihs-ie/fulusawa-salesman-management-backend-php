@@ -2,7 +2,9 @@
 
 namespace App\Infrastructures\Cemetery\Models;
 
+use App\Domains\Cemetery\ValueObjects\Criteria;
 use App\Infrastructures\Customer\Models\Customer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -34,5 +36,15 @@ class Cemetery extends Model
     public function customer()
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * 検索条件に一致するレコードを取得する
+     */
+    public function scopeOfCriteria(Builder $query, Criteria $criteria)
+    {
+        if ($criteria->customer) {
+            $query->where('customer', $criteria->customer->value);
+        }
     }
 }

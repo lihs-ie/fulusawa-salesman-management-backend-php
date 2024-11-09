@@ -4,7 +4,7 @@ namespace App\Domains\Cemetery;
 
 use App\Domains\Cemetery\Entities\Cemetery;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
-use App\Domains\Customer\ValueObjects\CustomerIdentifier;
+use App\Domains\Cemetery\ValueObjects\Criteria;
 use Illuminate\Support\Enumerable;
 
 /**
@@ -31,19 +31,12 @@ interface CemeteryRepository
     public function find(CemeteryIdentifier $identifier): Cemetery;
 
     /**
-     * 顧客識別子を指定して墓地情報を取得する
-     *
-     * @param CustomerIdentifier $customer
-     * @return Enumerable
-     */
-    public function ofCustomer(CustomerIdentifier $customer): Enumerable;
-
-    /**
      * 墓地情報一覧を取得する
      *
+     * @param Criteria $criteria
      * @return Enumerable
      */
-    public function list(): Enumerable;
+    public function list(Criteria $criteria): Enumerable;
 
     /**
      * 墓地情報を削除する
@@ -52,7 +45,6 @@ interface CemeteryRepository
      * @return void
      *
      * @throws \OutOfBoundsException 墓地情報が存在しない場合
-     * @throws \AuthorizationException 権限がない場合
      */
     public function delete(CemeteryIdentifier $identifier): void;
 }

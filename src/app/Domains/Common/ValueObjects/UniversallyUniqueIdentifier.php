@@ -22,8 +22,12 @@ abstract class UniversallyUniqueIdentifier
         return $this->value;
     }
 
-    public function equals(UniversallyUniqueIdentifier $other): bool
+    public function equals(?UniversallyUniqueIdentifier $other): bool
     {
+        if (\is_null($other)) {
+            return false;
+        }
+
         return $this->value === $other->value;
     }
 }

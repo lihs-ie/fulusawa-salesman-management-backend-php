@@ -29,8 +29,8 @@ class Feedback
      * フィードバックを永続化する
      *
      * @param string $identifier
-     * @param int $type
-     * @param int $status
+     * @param string $type
+     * @param string $status
      * @param string $content
      * @param string $createdAt
      * @param string $updatedAt
@@ -38,8 +38,8 @@ class Feedback
      */
     public function persist(
         string $identifier,
-        int $type,
-        int $status,
+        string $type,
+        string $status,
         string $content,
         string $createdAt,
         string $updatedAt
@@ -84,32 +84,32 @@ class Feedback
     /**
      * 文字列からフィードバックステータスに変換する
      *
-     * @param integer $status
+     * @param string $status
      * @return FeedbackStatus
      */
     private function convertStatus(string $status): FeedbackStatus
     {
         return match ($status) {
-            '1' => FeedbackStatus::WAITING,
-            '2' => FeedbackStatus::IN_PROGRESS,
-            '3' => FeedbackStatus::COMPLETED,
-            '4' => FeedbackStatus::NOT_NECESSARY,
+            FeedbackStatus::WAITING->name => FeedbackStatus::WAITING,
+            FeedbackStatus::IN_PROGRESS->name => FeedbackStatus::IN_PROGRESS,
+            FeedbackStatus::COMPLETED->name => FeedbackStatus::COMPLETED,
+            FeedbackStatus::NOT_NECESSARY->name => FeedbackStatus::NOT_NECESSARY,
         };
     }
 
     /**
      * 文字列からフィードバックタイプに変換する
      *
-     * @param integer $type
+     * @param string $type
      * @return FeedbackType
      */
     private function convertType(string $type): FeedbackType
     {
         return match ($type) {
-            '1' => FeedbackType::IMPROVEMENT,
-            '2' => FeedbackType::PROBLEM,
-            '3' => FeedbackType::QUESTION,
-            '4' => FeedbackType::OTHER,
+            FeedbackType::IMPROVEMENT->name => FeedbackType::IMPROVEMENT,
+            FeedbackType::PROBLEM->name => FeedbackType::PROBLEM,
+            FeedbackType::QUESTION->name => FeedbackType::QUESTION,
+            FeedbackType::OTHER->name => FeedbackType::OTHER,
         };
     }
 
@@ -141,10 +141,10 @@ class Feedback
     private function convertSort(string $sort): Sort
     {
         return match ($sort) {
-            '1' => Sort::CREATED_AT_DESC,
-            '2' => Sort::CREATED_AT_ASC,
-            '3' => Sort::UPDATED_AT_DESC,
-            '4' => Sort::UPDATED_AT_ASC,
+            Sort::CREATED_AT_DESC->name => Sort::CREATED_AT_DESC,
+            Sort::CREATED_AT_ASC->name => Sort::CREATED_AT_ASC,
+            Sort::UPDATED_AT_DESC->name => Sort::UPDATED_AT_DESC,
+            Sort::UPDATED_AT_ASC->name => Sort::UPDATED_AT_ASC,
         };
     }
 }

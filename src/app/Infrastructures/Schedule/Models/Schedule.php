@@ -26,5 +26,6 @@ class Schedule extends Model
         'start',
         'end',
         'status',
+        'repeat',
     ];
 }
