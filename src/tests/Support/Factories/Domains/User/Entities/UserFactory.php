@@ -28,7 +28,8 @@ class UserFactory extends DependencyFactory
             lastName: $overrides['lastName'] ?? Str::random(\mt_rand(\abs($seed) % 10 + 1, 20)),
             address: $overrides['address'] ?? $builder->create(Address::class, $seed, $overrides),
             phone: $overrides['phone'] ?? $builder->create(PhoneNumber::class, $seed, $overrides),
-            mail: $overrides['mail'] ?? $builder->create(MailAddress::class, $seed, $overrides),
+            email: $overrides['email'] ?? $builder->create(MailAddress::class, $seed, $overrides),
+            password: $overrides['password'] ?? Str::random(\mt_rand(\abs($seed) % 10 + 1, 20)),
             role: $overrides['role'] ?? $builder->create(Role::class, $seed, $overrides),
         );
     }
@@ -48,7 +49,8 @@ class UserFactory extends DependencyFactory
             lastName: $overrides['lastName'] ?? $instance->lastName(),
             address: $overrides['address'] ?? $instance->address(),
             phone: $overrides['phone'] ?? $instance->phone(),
-            mail: $overrides['mail'] ?? $instance->mail(),
+            email: $overrides['email'] ?? $instance->email(),
+            password: $overrides['password'] ?? $instance->password(),
             role: $overrides['role'] ?? $instance->role(),
         );
     }

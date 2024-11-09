@@ -17,9 +17,10 @@ use Illuminate\Support\Enumerable;
  */
 class TransactionHistory
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly TransactionHistoryRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 

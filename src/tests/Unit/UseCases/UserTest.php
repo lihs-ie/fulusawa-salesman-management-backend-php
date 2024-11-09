@@ -56,7 +56,8 @@ class UserTest extends TestCase
             name: $parameters['name'],
             address: $parameters['address'],
             phone: $parameters['phone'],
-            mail: $parameters['mail'],
+            email: $parameters['email'],
+            password: $parameters['password'],
             role: $parameters['role'],
         );
 
@@ -81,7 +82,8 @@ class UserTest extends TestCase
             name: $parameters['name'],
             address: $parameters['address'],
             phone: $parameters['phone'],
-            mail: $parameters['mail'],
+            email: $parameters['email'],
+            password: $parameters['password'],
             role: $parameters['role'],
         );
 
@@ -114,12 +116,12 @@ class UserTest extends TestCase
         $actuals = $useCase->list([]);
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -136,12 +138,12 @@ class UserTest extends TestCase
         $this->assertSame($expecteds->count(), $actuals->count());
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -159,7 +161,6 @@ class UserTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onRemove' => $onRemove]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         $useCase->delete($target->identifier()->value());
@@ -182,7 +183,6 @@ class UserTest extends TestCase
                 null,
                 ['onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -201,7 +201,6 @@ class UserTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -219,7 +218,8 @@ class UserTest extends TestCase
         $this->assertTrue($expected->lastName() === $actual->lastName());
         $this->assertTrue($expected->address()->equals($actual->address()));
         $this->assertTrue($expected->phone()->equals($actual->phone()));
-        $this->assertTrue($expected->mail()->equals($actual->mail()));
+        $this->assertTrue($expected->email()->equals($actual->email()));
+        $this->assertTrue($expected->password() === $actual->password());
         $this->assertTrue($expected->role() === $actual->role());
     }
 
@@ -242,28 +242,29 @@ class UserTest extends TestCase
         };
 
         return [
-          'identifier' => $entity->identifier()->value(),
-          'name' => [
-            'first' => $entity->firstName(),
-            'last' => $entity->lastName(),
-          ],
-          'address' => [
-            'postalCode' => [
-              'first' => $entity->address()->postalCode()->first(),
-              'second' => $entity->address()->postalCode()->second(),
+            'identifier' => $entity->identifier()->value(),
+            'name' => [
+                'first' => $entity->firstName(),
+                'last' => $entity->lastName(),
             ],
-            'prefecture' => $entity->address()->prefecture()->value,
-            'city' => $entity->address()->city(),
-            'street' => $entity->address()->street(),
-            'building' => $entity->address()->building(),
-          ],
-          'phone' => [
-            'areaCode' => $entity->phone()->areaCode(),
-            'localCode' => $entity->phone()->localCode(),
-            'subscriberNumber' => $entity->phone()->subscriberNumber(),
-          ],
-          'mail' => $entity->mail()->value(),
-          'role' => $role,
+            'address' => [
+                'postalCode' => [
+                    'first' => $entity->address()->postalCode()->first(),
+                    'second' => $entity->address()->postalCode()->second(),
+                ],
+                'prefecture' => $entity->address()->prefecture()->value,
+                'city' => $entity->address()->city(),
+                'street' => $entity->address()->street(),
+                'building' => $entity->address()->building(),
+            ],
+            'phone' => [
+                'areaCode' => $entity->phone()->areaCode(),
+                'localCode' => $entity->phone()->localCode(),
+                'subscriberNumber' => $entity->phone()->subscriberNumber(),
+            ],
+            'email' => $entity->email()->value(),
+            'password' => $entity->password(),
+            'role' => $role,
         ];
     }
 }

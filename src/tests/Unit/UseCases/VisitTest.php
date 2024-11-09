@@ -119,12 +119,12 @@ class VisitTest extends TestCase
         $actuals = $useCase->list();
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -141,12 +141,12 @@ class VisitTest extends TestCase
         $this->assertSame($expecteds->count(), $actuals->count());
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -164,7 +164,6 @@ class VisitTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onRemove' => $onRemove]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         $useCase->delete($target->identifier()->value());
@@ -172,6 +171,28 @@ class VisitTest extends TestCase
         $removed->each(function (Entity $instance) use ($target): void {
             $this->assertFalse($instance->identifier()->equals($target->identifier()));
         });
+    }
+
+    /**
+     * @testdox testOfUserSuccessfulReturnsEntities ofUserメソッドで指定したユーザーの訪問を取得できること.
+     */
+    public function testOfUserSuccessfulReturnsEntities(): void
+    {
+        $user = $this->instances->random()->user();
+
+        $expecteds = $this->instances->filter(fn (Entity $instance) => $instance->user()->equals($user));
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $actuals = $useCase->ofUser($user->value());
+
+        $expecteds
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -187,7 +208,6 @@ class VisitTest extends TestCase
                 null,
                 ['onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -206,7 +226,6 @@ class VisitTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -252,27 +271,27 @@ class VisitTest extends TestCase
         };
 
         return [
-          'identifier' => $entity->identifier()->value(),
-          'user' => $entity->user()->value(),
-          'visitedAt' => $entity->visitedAt()->toAtomString(),
-          'address' => [
-            'postalCode' => [
-              'first' => $entity->address()->postalCode()->first(),
-              'second' => $entity->address()->postalCode()->second(),
+            'identifier' => $entity->identifier()->value(),
+            'user' => $entity->user()->value(),
+            'visitedAt' => $entity->visitedAt()->toAtomString(),
+            'address' => [
+                'postalCode' => [
+                    'first' => $entity->address()->postalCode()->first(),
+                    'second' => $entity->address()->postalCode()->second(),
+                ],
+                'prefecture' => $entity->address()->prefecture()->value,
+                'city' => $entity->address()->city(),
+                'street' => $entity->address()->street(),
+                'building' => $entity->address()->building(),
             ],
-            'prefecture' => $entity->address()->prefecture()->value,
-            'city' => $entity->address()->city(),
-            'street' => $entity->address()->street(),
-            'building' => $entity->address()->building(),
-          ],
-          'phone' => \is_null($entity->phone()) ? null : [
-            'areaCode' => $entity->phone()->areaCode(),
-            'localCode' => $entity->phone()->localCode(),
-            'subscriberNumber' => $entity->phone()->subscriberNumber(),
-          ],
-          'hasGraveyard' => $entity->hasGraveyard(),
-          'note' => $entity->note(),
-          'result' => $result,
+            'phone' => \is_null($entity->phone()) ? null : [
+                'areaCode' => $entity->phone()->areaCode(),
+                'localCode' => $entity->phone()->localCode(),
+                'subscriberNumber' => $entity->phone()->subscriberNumber(),
+            ],
+            'hasGraveyard' => $entity->hasGraveyard(),
+            'note' => $entity->note(),
+            'result' => $result,
         ];
     }
 }

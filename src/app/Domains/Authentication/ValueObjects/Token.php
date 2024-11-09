@@ -7,15 +7,22 @@ namespace App\Domains\Authentication\ValueObjects;
  */
 class Token
 {
-    public const VALID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\|.{1,}$/';
-
     public function __construct(
+        public readonly TokenType $type,
         public readonly string $value,
         public readonly \DateTimeInterface $expiresAt,
     ) {
-        if (!\preg_match(self::VALID_PATTERN, $value)) {
+        if ($value === '') {
             throw new \InvalidArgumentException('Invalid value format');
         }
+    }
+
+    /**
+     * トークン種別を取得する
+     */
+    public function type(): TokenType
+    {
+        return $this->type;
     }
 
     /**
@@ -48,6 +55,10 @@ class Token
     public function equals(?self $other): bool
     {
         if (is_null($other)) {
+            return false;
+        }
+
+        if ($this->type !== $other->type) {
             return false;
         }
 

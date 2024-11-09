@@ -4,6 +4,7 @@ namespace App\Domains\Authentication;
 
 use App\Domains\Authentication\Entities\Authentication;
 use App\Domains\Authentication\ValueObjects\AuthenticationIdentifier;
+use App\Domains\Authentication\ValueObjects\Token;
 use App\Domains\Common\ValueObjects\MailAddress;
 use Illuminate\Support\Enumerable;
 
@@ -16,11 +17,11 @@ interface AuthenticationRepository
      * 認証を永続化する
      *
      * @param AuthenticationIdentifier $identifier
-     * @param MailAddress $mail
+     * @param MailAddress $email
      * @param string $password
      * @return Authentication
      */
-    public function persist(AuthenticationIdentifier $identifier, MailAddress $mail, string $password): Authentication;
+    public function persist(AuthenticationIdentifier $identifier, MailAddress $email, string $password): Authentication;
 
     /**
      * 認証を取得する
@@ -31,28 +32,30 @@ interface AuthenticationRepository
     public function find(AuthenticationIdentifier $identifier): Authentication;
 
     /**
-     * 認証が有効か確認する
+     * トークンが有効か確認する
      *
-     * @param Authentication $authentication
-     * @return Enumerable
-     *
-     * ※ 捩り値は['accessToken' => bool, 'refreshToken' => bool]の形式で返す
+     * @param Token $token
+     * @return bool
      */
-    public function introspection(Authentication $authentication): Enumerable;
+    public function introspection(Token $token): bool;
 
     /**
      * 認証を更新する
      *
-     * @param AuthenticationIdentifier $identifier
+     * @param Token $token
      * @return Authentication
+     *
+     * @throws \UnexpectedValueException トークン種別がリフレッシュトークンでない場合|トークンが有効期限切れの場合
+     * @throws \OutOfBoundsException トークンが存在しない場合
+     * @throws \RuntimeException トークンが既に使用済みの場合
      */
-    public function refresh(AuthenticationIdentifier $identifier): Authentication;
+    public function refresh(Token $token): Authentication;
 
     /**
-     * 認証を破棄する
+     * トークンを破棄する
      *
-     * @param AuthenticationIdentifier $identifier
+     * @param Token $token
      * @return void
      */
-    public function revoke(AuthenticationIdentifier $identifier): void;
+    public function revoke(Token $token): void;
 }

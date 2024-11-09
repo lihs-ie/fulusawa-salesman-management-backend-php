@@ -2,6 +2,7 @@
 
 namespace Tests\Support\Factories\Domains\Visit;
 
+use App\Domains\User\ValueObjects\UserIdentifier;
 use App\Domains\Visit\VisitRepository;
 use App\Domains\Visit\Entities\Visit;
 use App\Domains\Visit\ValueObjects\VisitIdentifier;
@@ -88,6 +89,16 @@ class VisitRepositoryFactory extends DependencyFactory
                 if ($callback = $this->onRemove) {
                     $callback($removed);
                 }
+            }
+
+            /**
+             * {@inheritdoc}
+             */
+            public function ofUser(UserIdentifier $user): Enumerable
+            {
+                return $this->instances->filter(
+                    fn (Visit $instance): bool => $user->equals($instance->user())
+                );
             }
         };
     }

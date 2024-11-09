@@ -115,12 +115,12 @@ class TransactionHistoryTest extends TestCase
         $actuals = $useCase->list();
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -138,7 +138,6 @@ class TransactionHistoryTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onRemove' => $onRemove]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         $useCase->delete($target->identifier()->value());
@@ -156,19 +155,19 @@ class TransactionHistoryTest extends TestCase
         $user = $this->instances->random()->user();
 
         $expecteds = $this->instances
-          ->filter(fn (Entity $entity): bool => $entity->user()->equals($user));
+            ->filter(fn (Entity $entity): bool => $entity->user()->equals($user));
 
         [$useCase] = $this->createPersistUseCase();
 
         $actuals = $useCase->ofUser($user->value());
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -179,19 +178,19 @@ class TransactionHistoryTest extends TestCase
         $customer = $this->instances->random()->customer();
 
         $expecteds = $this->instances
-          ->filter(fn (Entity $entity): bool => $entity->customer()->equals($customer));
+            ->filter(fn (Entity $entity): bool => $entity->customer()->equals($customer));
 
         [$useCase] = $this->createPersistUseCase();
 
         $actuals = $useCase->ofCustomer($customer->value());
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -207,7 +206,6 @@ class TransactionHistoryTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersist]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -226,7 +224,6 @@ class TransactionHistoryTest extends TestCase
                 null,
                 ['onPersist' => $onPersist]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -265,12 +262,12 @@ class TransactionHistoryTest extends TestCase
     private function createParametersFromEntity(Entity $entity): array
     {
         return [
-          'identifier' => $entity->identifier()->value(),
-          'customer' => $entity->customer()->value(),
-          'user' => $entity->user()->value(),
-          'type' => $this->convertTransactionType($entity->type()),
-          'description' => $entity->description(),
-          'date' => $entity->date()->toAtomString(),
+            'identifier' => $entity->identifier()->value(),
+            'customer' => $entity->customer()->value(),
+            'user' => $entity->user()->value(),
+            'type' => $this->convertTransactionType($entity->type()),
+            'description' => $entity->description(),
+            'date' => $entity->date()->toAtomString(),
         ];
     }
 

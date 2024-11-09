@@ -19,7 +19,7 @@ class CriteriaFactory extends DependencyFactory
      */
     public function create(DependencyBuilder $builder, int $seed, array $overrides): Criteria
     {
-        if (isset($overrides['fill']) && $overrides['fill']) {
+        if (isset($overrides['filled']) && $overrides['filled']) {
             return new Criteria(
                 status: $overrides['status'] ?? $builder->create(FeedbackStatus::class, $seed, $overrides),
                 type: $overrides['type'] ?? $builder->create(FeedbackType::class, $seed, $overrides),
@@ -29,9 +29,9 @@ class CriteriaFactory extends DependencyFactory
 
 
         return new Criteria(
-            status: $overrides['status'] ?? $builder->create(FeedbackStatus::class, $seed, $overrides),
-            type: $overrides['type'] ?? $builder->create(FeedbackType::class, $seed, $overrides),
-            sort: $overrides['sort'] ?? $builder->create(Sort::class, $seed, $overrides),
+            status: $overrides['status'] ?? null,
+            type: $overrides['type'] ?? null,
+            sort: $overrides['sort'] ?? null,
         );
     }
 

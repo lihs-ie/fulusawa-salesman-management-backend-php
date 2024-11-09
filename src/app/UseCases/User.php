@@ -9,15 +9,17 @@ use App\Domains\User\ValueObjects\Role;
 use App\Domains\User\ValueObjects\UserIdentifier;
 use App\UseCases\Factories\CommonDomainFactory;
 use Illuminate\Support\Enumerable;
+use Illuminate\Support\Facades\Hash;
 
 /**
  * ユーザーユースケース
  */
 class User
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly UserRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 
@@ -28,7 +30,8 @@ class User
      * @param array $name
      * @param array $address
      * @param array $phone
-     * @param string $mail
+     * @param string $email
+     * @param string $password
      * @param string $role
      * @return void
      */
@@ -37,16 +40,18 @@ class User
         array $name,
         array $address,
         array $phone,
-        string $mail,
+        string $email,
+        string $password,
         string $role,
     ): void {
         $entity = new Entity(
             identifier: new UserIdentifier($identifier),
-            firstName: $this->factory->extractString($name, 'first'),
-            lastName: $this->factory->extractString($name, 'last'),
-            address: $this->factory->extractAddress($address),
-            phone: $this->factory->extractPhone($phone),
-            mail: new MailAddress($mail),
+            firstName: $this->extractString($name, 'first'),
+            lastName: $this->extractString($name, 'last'),
+            address: $this->extractAddress($address),
+            phone: $this->extractPhone($phone),
+            email: new MailAddress($email),
+            password: Hash::make($password),
             role: $this->convertRole($role)
         );
 

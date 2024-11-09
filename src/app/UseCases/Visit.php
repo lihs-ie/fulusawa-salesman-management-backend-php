@@ -16,9 +16,10 @@ use Illuminate\Support\Enumerable;
  */
 class Visit
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly VisitRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 
@@ -49,8 +50,8 @@ class Visit
             identifier: new VisitIdentifier($identifier),
             user: new UserIdentifier($user),
             visitedAt: CarbonImmutable::parse($visitedAt),
-            address: $this->factory->extractAddress($address),
-            phone: \is_null($phone) ? null : $this->factory->extractPhone($phone),
+            address: $this->extractAddress($address),
+            phone: \is_null($phone) ? null : $this->extractPhone($phone),
             hasGraveyard: $hasGraveyard,
             note: $note,
             result: $this->convertVisitResult($result),
@@ -89,6 +90,17 @@ class Visit
     public function delete(string $identifier): void
     {
         $this->repository->delete(new VisitIdentifier($identifier));
+    }
+
+    /**
+     * ユーザーの訪問一覧を取得する
+     *
+     * @param string $user
+     * @return Enumerable<Entity>
+     */
+    public function ofUser(string $user): Enumerable
+    {
+        return $this->repository->ofUser(new UserIdentifier($user));
     }
 
     /**

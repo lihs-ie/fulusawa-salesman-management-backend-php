@@ -121,12 +121,12 @@ class ScheduleTest extends TestCase
         $actuals = $useCase->list([]);
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -141,17 +141,17 @@ class ScheduleTest extends TestCase
         $title = $criteria->title();
 
         $expecteds = $this->instances
-          ->when(!\is_null($status), fn (Enumerable $instances) => $instances->filter(fn (Entity $schedule): bool => $schedule->status() === $status))
-          ->when(!\is_null($date), function (Enumerable $instances) use ($date): Enumerable {
-              return $instances->filter(function (Entity $schedule) use ($date): bool {
-                  $candidate = $schedule->date();
+            ->when(!\is_null($status), fn (Enumerable $instances) => $instances->filter(fn (Entity $schedule): bool => $schedule->status() === $status))
+            ->when(!\is_null($date), function (Enumerable $instances) use ($date): Enumerable {
+                return $instances->filter(function (Entity $schedule) use ($date): bool {
+                    $candidate = $schedule->date();
 
-                  return $candidate->includes($date->start()) && $candidate->includes($date->end());
-              });
-          })
-          ->when(!\is_null($title), function (Enumerable $instances) use ($title): Enumerable {
-              return $instances->filter(fn (Entity $schedule): bool => str_contains($schedule->title(), $title));
-          });
+                    return $candidate->includes($date->start()) && $candidate->includes($date->end());
+                });
+            })
+            ->when(!\is_null($title), function (Enumerable $instances) use ($title): Enumerable {
+                return $instances->filter(fn (Entity $schedule): bool => str_contains($schedule->title(), $title));
+            });
 
         [$useCase] = $this->createPersistUseCase();
 
@@ -160,12 +160,12 @@ class ScheduleTest extends TestCase
         $this->assertSame($expecteds->count(), $actuals->count());
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -183,7 +183,6 @@ class ScheduleTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onRemove' => $onRemove]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         $useCase->delete($target->identifier()->value());
@@ -201,7 +200,7 @@ class ScheduleTest extends TestCase
         $user = $this->instances->random()->user();
 
         $expecteds = $this->instances
-          ->filter(fn (Entity $schedule): bool => $user->equals($schedule->user()));
+            ->filter(fn (Entity $schedule): bool => $user->equals($schedule->user()));
 
         [$useCase] = $this->createPersistUseCase();
 
@@ -210,12 +209,12 @@ class ScheduleTest extends TestCase
         $this->assertSame($expecteds->count(), $actuals->count());
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -231,7 +230,6 @@ class ScheduleTest extends TestCase
                 null,
                 ['onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -250,7 +248,6 @@ class ScheduleTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -305,20 +302,20 @@ class ScheduleTest extends TestCase
         };
 
         return [
-          'identifier' => $entity->identifier()->value(),
-          'user' => $entity->user()->value(),
-          'customer' => $entity->customer()?->value(),
-          'title' => $entity->title(),
-          'description' => $entity->description(),
-          'date' => \is_null($entity->date()) ? null : [
-            'start' => $entity->date()->start()?->toAtomString(),
-            'end' => $entity->date()->end()?->toAtomString(),
-          ],
-          'status' => $status,
-          'repeatFrequency' => \is_null($entity->repeat) ? null : [
-            'type' => $frequencyType,
-            'interval' => $entity->repeat->interval(),
-          ],
+            'identifier' => $entity->identifier()->value(),
+            'user' => $entity->user()->value(),
+            'customer' => $entity->customer()?->value(),
+            'title' => $entity->title(),
+            'description' => $entity->description(),
+            'date' => \is_null($entity->date()) ? null : [
+                'start' => $entity->date()->start()?->toAtomString(),
+                'end' => $entity->date()->end()?->toAtomString(),
+            ],
+            'status' => $status,
+            'repeatFrequency' => \is_null($entity->repeat) ? null : [
+                'type' => $frequencyType,
+                'interval' => $entity->repeat->interval(),
+            ],
         ];
     }
 
@@ -335,12 +332,12 @@ class ScheduleTest extends TestCase
         };
 
         return [
-          'status' => $status,
-          'date' => \is_null($criteria->date()) ? null : [
-            'start' => $criteria->date()->start()?->toAtomString(),
-            'end' => $criteria->date()->end()?->toAtomString(),
-          ],
-          'title' => $criteria->title(),
+            'status' => $status,
+            'date' => \is_null($criteria->date()) ? null : [
+                'start' => $criteria->date()->start()?->toAtomString(),
+                'end' => $criteria->date()->end()?->toAtomString(),
+            ],
+            'title' => $criteria->title(),
         ];
     }
 }

@@ -179,7 +179,6 @@ class DailyReportTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onRemove' => $onRemove]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         $useCase->delete($target->identifier()->value());
@@ -202,7 +201,6 @@ class DailyReportTest extends TestCase
                 null,
                 ['onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -221,7 +219,6 @@ class DailyReportTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];

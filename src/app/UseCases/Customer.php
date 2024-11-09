@@ -16,9 +16,10 @@ use Illuminate\Support\Enumerable;
  */
 class Customer
 {
+    use CommonDomainFactory;
+
     public function __construct(
         private readonly CustomerRepository $repository,
-        private readonly CommonDomainFactory $factory
     ) {
     }
 
@@ -43,10 +44,10 @@ class Customer
     ): void {
         $entity = new Entity(
             identifier: new CustomerIdentifier($identifier),
-            lastName: $this->factory->extractString($name, 'lastName'),
-            firstName: $this->factory->extractString($name, 'firstName'),
-            address: $this->factory->extractAddress($address),
-            phone: $this->factory->extractPhone($phone),
+            lastName: $this->extractString($name, 'lastName'),
+            firstName: $this->extractString($name, 'firstName'),
+            address: $this->extractAddress($address),
+            phone: $this->extractPhone($phone),
             cemeteries: $this->extractCemeteries($cemeteries),
             transactionHistories: $this->extractTransactionHistories($transactionHistories),
         );
@@ -95,7 +96,7 @@ class Customer
     private function extractCemeteries(array $cemeteries): Enumerable
     {
         return Collection::make($cemeteries)
-          ->map(fn (string $cemetery): CemeteryIdentifier => new CemeteryIdentifier($cemetery));
+            ->map(fn (string $cemetery): CemeteryIdentifier => new CemeteryIdentifier($cemetery));
     }
 
     /**
@@ -107,8 +108,8 @@ class Customer
     private function extractTransactionHistories(array $transactions): Enumerable
     {
         return Collection::make($transactions)
-          ->map(fn (string $transaction): TransactionHistoryIdentifier => new TransactionHistoryIdentifier(
-              value: $transaction
-          ));
+            ->map(fn (string $transaction): TransactionHistoryIdentifier => new TransactionHistoryIdentifier(
+                value: $transaction
+            ));
     }
 }

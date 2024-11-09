@@ -16,8 +16,6 @@ interface UserRepository
      *
      * @param User $user
      * @return void
-     *
-     * @throws \AuthorizationException 権限がない場合
      */
     public function persist(User $user): void;
 
@@ -35,8 +33,6 @@ interface UserRepository
      * ユーザー一覧を取得する
      *
      * @return Enumerable
-     *
-     * @throws \AuthorizationException 権限がない場合
      */
     public function list(): Enumerable;
 
@@ -45,8 +41,6 @@ interface UserRepository
      *
      * @param UserIdentifier $identifier
      * @return void
-     *
-     * @throws \AuthorizationException 権限がない場合
      */
     public function delete(UserIdentifier $identifier): void;
 }

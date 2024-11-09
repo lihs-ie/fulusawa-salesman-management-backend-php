@@ -115,12 +115,12 @@ class CustomerTest extends TestCase
         $actuals = $useCase->list();
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Customer $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Customer::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Customer $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Customer::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -138,7 +138,6 @@ class CustomerTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onRemove' => $onRemove]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         $useCase->delete(
@@ -163,7 +162,6 @@ class CustomerTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersist]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -182,7 +180,6 @@ class CustomerTest extends TestCase
                 null,
                 ['onPersist' => $onPersist]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -218,30 +215,30 @@ class CustomerTest extends TestCase
     private function createParametersFromEntity(Customer $entity): array
     {
         return [
-          'identifier' => $entity->identifier()->value(),
-          'name' => ['lastName' => $entity->lastName(), 'firstName' => $entity->firstName()],
-          'address' => [
-            'postalCode' => [
-              'first' => $entity->address()->postalCode()->first(),
-              'second' => $entity->address()->postalCode()->second(),
+            'identifier' => $entity->identifier()->value(),
+            'name' => ['lastName' => $entity->lastName(), 'firstName' => $entity->firstName()],
+            'address' => [
+                'postalCode' => [
+                    'first' => $entity->address()->postalCode()->first(),
+                    'second' => $entity->address()->postalCode()->second(),
+                ],
+                'prefecture' => $entity->address()->prefecture()->value,
+                'city' => $entity->address()->city(),
+                'street' => $entity->address()->street(),
+                'building' => $entity->address()->building(),
             ],
-            'prefecture' => $entity->address()->prefecture()->value,
-            'city' => $entity->address()->city(),
-            'street' => $entity->address()->street(),
-            'building' => $entity->address()->building(),
-          ],
-          'phone' => [
-            'areaCode' => $entity->phone()->areaCode(),
-            'localCode' => $entity->phone()->localCode(),
-            'subscriberNumber' => $entity->phone()->subscriberNumber(),
-          ],
-          'cemeteries' => $entity->cemeteries()
-            ->map(fn (CemeteryIdentifier $cemetery): string => $cemetery->value())
-            ->all(),
-          'transactionHistories' => $entity
-            ->transactionHistories()
-            ->map(fn (TransactionHistoryIdentifier $history): string => $history->value())
-            ->all(),
+            'phone' => [
+                'areaCode' => $entity->phone()->areaCode(),
+                'localCode' => $entity->phone()->localCode(),
+                'subscriberNumber' => $entity->phone()->subscriberNumber(),
+            ],
+            'cemeteries' => $entity->cemeteries()
+                ->map(fn (CemeteryIdentifier $cemetery): string => $cemetery->value())
+                ->all(),
+            'transactionHistories' => $entity
+                ->transactionHistories()
+                ->map(fn (TransactionHistoryIdentifier $history): string => $history->value())
+                ->all(),
         ];
     }
 }

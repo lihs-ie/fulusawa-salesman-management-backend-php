@@ -10,10 +10,12 @@
     "require": {
         "php": "^8.2",
         "laravel/framework": "^11.9",
+        "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.9",
         "myclabs/php-enum": "^1.8"
     },
     "require-dev": {
+        "barryvdh/laravel-ide-helper": "^3.2",
         "fakerphp/faker": "^1.23",
         "friendsofphp/php-cs-fixer": "^3.64",
         "laravel/pail": "^1.1",

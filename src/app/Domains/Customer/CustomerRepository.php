@@ -16,8 +16,6 @@ interface CustomerRepository
      *
      * @param Customer $customer
      * @return void
-     *
-     * @throws \AuthorizationException 権限がない場合
      */
     public function persist(Customer $customer): void;
 
@@ -35,8 +33,6 @@ interface CustomerRepository
      * 顧客一覧を取得する
      *
      * @return Enumerable
-     *
-     * @throws \AuthorizationException 権限がない場合
      */
     public function list(): Enumerable;
 
@@ -46,7 +42,7 @@ interface CustomerRepository
      * @param CustomerIdentifier $identifier
      * @return void
      *
-     * @throws \AuthorizationException 権限がない場合
+     * @throws \OutOfBoundsException 顧客が存在しない場合
      */
     public function delete(CustomerIdentifier $identifier): void;
 }

@@ -155,7 +155,6 @@ class CemeteryTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onRemove' => $onRemove]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         $useCase->delete($target->identifier()->value());
@@ -186,7 +185,6 @@ class CemeteryTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersist]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -205,7 +203,6 @@ class CemeteryTest extends TestCase
                 null,
                 ['onPersist' => $onPersist]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];

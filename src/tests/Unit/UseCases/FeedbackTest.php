@@ -115,12 +115,12 @@ class FeedbackTest extends TestCase
         $actuals = $useCase->list([]);
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -138,22 +138,22 @@ class FeedbackTest extends TestCase
         };
 
         $expecteds = $this->instances
-          ->filter(fn (Entity $instance): bool => $instance->status() === $criteria->status())
-          ->filter(fn (Entity $instance): bool => $instance->type() === $criteria->type())
-          ->pipe($sort)
-          ->values();
+            ->filter(fn (Entity $instance): bool => $instance->status() === $criteria->status())
+            ->filter(fn (Entity $instance): bool => $instance->type() === $criteria->type())
+            ->pipe($sort)
+            ->values();
 
         [$useCase] = $this->createPersistUseCase();
 
         $actuals = $useCase->list($this->deflateCriteria($criteria));
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (Entity $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -169,7 +169,6 @@ class FeedbackTest extends TestCase
                 null,
                 ['onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -188,7 +187,6 @@ class FeedbackTest extends TestCase
                 null,
                 ['instances' => $this->instances, 'onPersist' => $onPersisted]
             ),
-            factory: new CommonDomainFactory(),
         );
 
         return [$useCase, $persisted];
@@ -236,12 +234,12 @@ class FeedbackTest extends TestCase
         };
 
         return [
-          'identifier' => $entity->identifier()->value(),
-          'type' => $type,
-          'status' => $status,
-          'content' => $entity->content(),
-          'createdAt' => $entity->createdAt()->toAtomString(),
-          'updatedAt' => $entity->updatedAt()->toAtomString(),
+            'identifier' => $entity->identifier()->value(),
+            'type' => $type,
+            'status' => $status,
+            'content' => $entity->content(),
+            'createdAt' => $entity->createdAt()->toAtomString(),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
         ];
     }
 
@@ -275,9 +273,9 @@ class FeedbackTest extends TestCase
         };
 
         return [
-          'status' => $status,
-          'type' => $type,
-          'sort' => $sort,
+            'status' => $status,
+            'type' => $type,
+            'sort' => $sort,
         ];
     }
 }
