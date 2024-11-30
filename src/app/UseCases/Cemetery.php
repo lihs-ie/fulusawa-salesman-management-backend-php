@@ -6,6 +6,7 @@ use App\Domains\Cemetery\CemeteryRepository;
 use App\Domains\Cemetery\Entities\Cemetery as Entity;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
 use App\Domains\Cemetery\ValueObjects\CemeteryType;
+use App\Domains\Cemetery\ValueObjects\Criteria;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\UseCases\Factories\CommonDomainFactory;
 use Carbon\CarbonImmutable;
@@ -68,22 +69,14 @@ class Cemetery
     /**
      * 墓地情報一覧を取得する
      *
+     * @param array $conditions
      * @return Enumerable<Entity>
      */
-    public function list(): Enumerable
+    public function list(array $conditions): Enumerable
     {
-        return $this->repository->list();
-    }
-
-    /**
-     * 顧客の墓地情報一覧を取得する
-     *
-     * @param string $customer
-     * @return Enumerable<Entity>
-     */
-    public function ofCustomer(string $customer): Enumerable
-    {
-        return $this->repository->ofCustomer(new CustomerIdentifier($customer));
+        return $this->repository->list(
+            $this->createCriteria($conditions)
+        );
     }
 
     /**
@@ -106,10 +99,22 @@ class Cemetery
     private function convertCemeteryType(string $type): CemeteryType
     {
         return match ($type) {
-            '1' => CemeteryType::INDIVIDUAL,
-            '2' => CemeteryType::FAMILY,
-            '3' => CemeteryType::COMMUNITY,
-            '4' => CemeteryType::OTHER,
+            CemeteryType::INDIVIDUAL->name => CemeteryType::INDIVIDUAL,
+            CemeteryType::FAMILY->name => CemeteryType::FAMILY,
+            CemeteryType::COMMUNITY->name => CemeteryType::COMMUNITY,
+            CemeteryType::OTHER->name => CemeteryType::OTHER,
         };
+    }
+
+    /**
+     * 配列から検索条件を生成する.
+     */
+    private function createCriteria(array $conditions): Criteria
+    {
+        $customer = $this->extractString($conditions, 'customer');
+
+        return new Criteria(
+            customer: \is_null($customer) ? null : new CustomerIdentifier($customer),
+        );
     }
 }

@@ -44,8 +44,8 @@ class Customer
     ): void {
         $entity = new Entity(
             identifier: new CustomerIdentifier($identifier),
-            lastName: $this->extractString($name, 'lastName'),
-            firstName: $this->extractString($name, 'firstName'),
+            lastName: $this->extractString($name, 'last'),
+            firstName: $this->extractString($name, 'first'),
             address: $this->extractAddress($address),
             phone: $this->extractPhone($phone),
             cemeteries: $this->extractCemeteries($cemeteries),

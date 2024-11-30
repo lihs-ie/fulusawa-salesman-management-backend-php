@@ -119,9 +119,9 @@ class Schedule
     private function convertStatus(string $status): ScheduleStatus
     {
         return match ($status) {
-            '1' => ScheduleStatus::IN_COMPLETE,
-            '2' => ScheduleStatus::IN_PROGRESS,
-            '3' => ScheduleStatus::COMPLETED,
+            ScheduleStatus::IN_COMPLETE->name => ScheduleStatus::IN_COMPLETE,
+            ScheduleStatus::IN_PROGRESS->name => ScheduleStatus::IN_PROGRESS,
+            ScheduleStatus::COMPLETED->name => ScheduleStatus::COMPLETED,
         };
     }
 
@@ -134,10 +134,10 @@ class Schedule
     private function extractRepeatFrequency(array $repeatFrequency): RepeatFrequency
     {
         $type = match ($this->extractString($repeatFrequency, 'type')) {
-            '1' => FrequencyType::DAILY,
-            '2' => FrequencyType::WEEKLY,
-            '3' => FrequencyType::MONTHLY,
-            '4' => FrequencyType::YEARLY,
+            FrequencyType::DAILY->name => FrequencyType::DAILY,
+            FrequencyType::WEEKLY->name => FrequencyType::WEEKLY,
+            FrequencyType::MONTHLY->name => FrequencyType::MONTHLY,
+            FrequencyType::YEARLY->name => FrequencyType::YEARLY,
         };
 
         return new RepeatFrequency(

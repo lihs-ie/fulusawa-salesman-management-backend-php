@@ -5,6 +5,7 @@ namespace Tests\Unit\Infrastructures\Cemetery;
 use App\Domains\Cemetery\CemeteryRepository;
 use App\Domains\Cemetery\Entities\Cemetery as Entity;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
+use App\Domains\Cemetery\ValueObjects\Criteria;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Infrastructures\Cemetery\EloquentCemeteryRepository;
 use App\Infrastructures\Cemetery\Models\Cemetery as Record;
@@ -98,7 +99,18 @@ class EloquentCemeteryRepositoryTest extends TestCase
     {
         $repository = $this->createRepository();
 
-        $actuals = $repository->list();
+        $record = $this->pickRecord();
+
+        $criteria = new Criteria(
+            customer: new CustomerIdentifier($record->customer),
+        );
+
+        $expecteds = $this->records
+            ->filter(fn (Record $record): bool => $record->customer === $criteria->customer->value());
+
+        $actuals = $repository->list($criteria);
+
+        $this->assertSame($expecteds->count(), $actuals->count());
 
         $actuals->each(function (Entity $actual): void {
             $this->assertRecordProperties($actual);
@@ -127,16 +139,16 @@ class EloquentCemeteryRepositoryTest extends TestCase
     private function createEntity(string $customer, string $identifier = null): Entity
     {
         return $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              CemeteryIdentifier::class,
-              null,
-              ['value' => $identifier]
-          ),
-          'customer' => $this->builder()->create(
-              CustomerIdentifier::class,
-              null,
-              ['value' => $customer]
-          ),
+            'identifier' => $this->builder()->create(
+                CemeteryIdentifier::class,
+                null,
+                ['value' => $identifier]
+            ),
+            'customer' => $this->builder()->create(
+                CustomerIdentifier::class,
+                null,
+                ['value' => $customer]
+            ),
         ]);
     }
 
@@ -146,12 +158,12 @@ class EloquentCemeteryRepositoryTest extends TestCase
     private function assertPersistedRecord(Entity $entity): void
     {
         $this->assertDatabaseHas('cemeteries', [
-          'identifier' => $entity->identifier()->value(),
-          'customer' => $entity->customer()->value(),
-          'name' => $entity->name(),
-          'type' => $entity->type()->name,
-          'construction' => $entity->construction()->toAtomString(),
-          'in_house' => $entity->inHouse(),
+            'identifier' => $entity->identifier()->value(),
+            'customer' => $entity->customer()->value(),
+            'name' => $entity->name(),
+            'type' => $entity->type()->name,
+            'construction' => $entity->construction()->toAtomString(),
+            'in_house' => $entity->inHouse(),
         ]);
     }
 

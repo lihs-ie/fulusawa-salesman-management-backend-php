@@ -174,6 +174,24 @@ class AuthenticationRepositoryFactory extends DependencyFactory
                     $callback($removed);
                 }
             }
+
+            /**
+             * {@inheritdoc}
+             */
+            public function logout(AuthenticationIdentifier $identifier): void
+            {
+                $instance = $this->instances->first(
+                    fn (Authentication $instance): bool => $instance->identifier()->equals($identifier)
+                );
+
+                if (\is_null($instance)) {
+                    throw new \OutOfBoundsException('Authentication not found.');
+                }
+
+                $this->instances = $this->instances->reject(
+                    fn (Authentication $instance): bool => $instance->identifier()->equals($identifier)
+                );
+            }
         };
     }
 

@@ -34,16 +34,17 @@ class EloquentFeedbackRepository implements FeedbackRepository
     public function persist(Entity $feedback): void
     {
         $this->createQuery()
-          ->updateOrCreate(
-              ['identifier' => $feedback->identifier()->value()],
-              [
-              'identifier' => $feedback->identifier()->value(),
-              'type' => $feedback->type()->name,
-              'status' => $feedback->status()->name,
-              'content' => $feedback->content(),
-              'updated_at' => $feedback->updatedAt()->toDateTimeString(),
-        ]
-          );
+            ->updateOrCreate(
+                ['identifier' => $feedback->identifier()->value()],
+                [
+                    'identifier' => $feedback->identifier()->value(),
+                    'type' => $feedback->type()->name,
+                    'status' => $feedback->status()->name,
+                    'content' => $feedback->content(),
+                    'created_at' => $feedback->createdAt()->toAtomString(),
+                    'updated_at' => $feedback->updatedAt()->toAtomString(),
+                ]
+            );
     }
 
     /**
@@ -52,8 +53,8 @@ class EloquentFeedbackRepository implements FeedbackRepository
     public function find(FeedbackIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->where('identifier', $identifier->value())
+            ->first();
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('Feedback not found: %s', $identifier->value()));
@@ -68,26 +69,26 @@ class EloquentFeedbackRepository implements FeedbackRepository
     public function list(Criteria $criteria): Enumerable
     {
         $records = $this->createQuery()
-          ->when(
-              !\is_null($criteria->type()),
-              fn (Builder $query): Builder => $query->where('type', $criteria->type()->name)
-          )
-          ->when(
-              !\is_null($criteria->status()),
-              fn (Builder $query): Builder => $query->where('status', $criteria->status()->name)
-          )
-          ->when(
-              !\is_null($criteria->sort()),
-              function (Builder $query) use ($criteria): Builder {
-                  return match ($criteria->sort()) {
-                      Sort::CREATED_AT_ASC => $query->orderBy('created_at', 'asc'),
-                      Sort::CREATED_AT_DESC => $query->orderBy('created_at', 'desc'),
-                      Sort::UPDATED_AT_ASC => $query->orderBy('updated_at', 'asc'),
-                      Sort::UPDATED_AT_DESC => $query->orderBy('updated_at', 'desc'),
-                  };
-              }
-          )
-          ->get();
+            ->when(
+                !\is_null($criteria->type()),
+                fn (Builder $query): Builder => $query->where('type', $criteria->type()->name)
+            )
+            ->when(
+                !\is_null($criteria->status()),
+                fn (Builder $query): Builder => $query->where('status', $criteria->status()->name)
+            )
+            ->when(
+                !\is_null($criteria->sort()),
+                function (Builder $query) use ($criteria): Builder {
+                    return match ($criteria->sort()) {
+                        Sort::CREATED_AT_ASC => $query->orderBy('created_at', 'asc'),
+                        Sort::CREATED_AT_DESC => $query->orderBy('created_at', 'desc'),
+                        Sort::UPDATED_AT_ASC => $query->orderBy('updated_at', 'asc'),
+                        Sort::UPDATED_AT_DESC => $query->orderBy('updated_at', 'desc'),
+                    };
+                }
+            )
+            ->get();
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }

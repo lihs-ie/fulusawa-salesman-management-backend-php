@@ -6,16 +6,19 @@ use App\Domains\Cemetery\CemeteryRepository;
 use App\Domains\Cemetery\Entities\Cemetery as Entity;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
 use App\Domains\Cemetery\ValueObjects\CemeteryType;
+use App\Domains\Cemetery\ValueObjects\Criteria;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Infrastructures\Cemetery\Models\Cemetery as Record;
+use App\Infrastructures\Common\AbstractEloquentRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Enumerable;
+use PDOException;
 
 /**
  * 墓地情報リポジトリ
  */
-class EloquentCemeteryRepository implements CemeteryRepository
+class EloquentCemeteryRepository extends AbstractEloquentRepository implements CemeteryRepository
 {
     /**
      * コンストラクタ.
@@ -32,17 +35,24 @@ class EloquentCemeteryRepository implements CemeteryRepository
      */
     public function persist(Entity $cemetery): void
     {
-        $this->createQuery()
-          ->updateOrCreate([
-            'identifier' => $cemetery->identifier()->value(),
-          ], [
-            'identifier' => $cemetery->identifier()->value(),
-            'customer' => $cemetery->customer()->value(),
-            'name' => $cemetery->name(),
-            'type' => $cemetery->type()->name,
-            'construction' => $cemetery->construction()->toAtomString(),
-            'in_house' => $cemetery->inHouse(),
-          ]);
+        try {
+            $this->createQuery()
+                ->updateOrCreate([
+                    'identifier' => $cemetery->identifier()->value(),
+                ], [
+                    'identifier' => $cemetery->identifier()->value(),
+                    'customer' => $cemetery->customer()->value(),
+                    'name' => $cemetery->name(),
+                    'type' => $cemetery->type()->name,
+                    'construction' => $cemetery->construction()->toAtomString(),
+                    'in_house' => $cemetery->inHouse(),
+                ]);
+        } catch (PDOException $exception) {
+            $this->handlePDOException(
+                exception: $exception,
+                messages: $cemetery->identifier()->value()
+            );
+        }
     }
 
     /**
@@ -51,8 +61,8 @@ class EloquentCemeteryRepository implements CemeteryRepository
     public function find(CemeteryIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->where('identifier', $identifier->value())
+            ->first();
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException('Cemetery not found');
@@ -67,19 +77,20 @@ class EloquentCemeteryRepository implements CemeteryRepository
     public function ofCustomer(CustomerIdentifier $customer): Enumerable
     {
         $records = $this->createQuery()
-          ->where('customer', $customer->value())
-          ->get();
+            ->where('customer', $customer->value())
+            ->get();
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }
 
     /**
-     * {@inheritDoc}
+     * {@inheritDoc}_
      */
-    public function list(): Enumerable
+    public function list(Criteria $criteria): Enumerable
     {
         $records = $this->createQuery()
-          ->get();
+            ->ofCriteria($criteria)
+            ->get();
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }

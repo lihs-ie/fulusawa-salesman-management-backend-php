@@ -33,26 +33,26 @@ class EloquentUserRepository implements UserRepository
         $address = $user->address();
 
         $this->createQuery()
-          ->updateOrCreate(
-              ['identifier' => $user->identifier()->value()],
-              [
-              'identifier' => $user->identifier()->value(),
-              'first_name' => $user->firstName(),
-              'last_name' => $user->lastName(),
-              'phone_area_code' => $phone->areaCode(),
-              'phone_local_code' => $phone->localCode(),
-              'phone_subscriber_number' => $phone->subscriberNumber(),
-              'postal_code_first' => $address->postalCode()->first(),
-              'postal_code_second' => $address->postalCode()->second(),
-              'prefecture' => $address->prefecture->value,
-              'city' => $address->city(),
-              'street' => $address->street(),
-              'building' => $address->building(),
-              'email' => $user->email()->value(),
-              'password' => $user->password(),
-              'role' => $user->role->name,
-        ]
-          );
+            ->updateOrCreate(
+                ['identifier' => $user->identifier()->value()],
+                [
+                    'identifier' => $user->identifier()->value(),
+                    'first_name' => $user->firstName(),
+                    'last_name' => $user->lastName(),
+                    'phone_area_code' => $phone->areaCode(),
+                    'phone_local_code' => $phone->localCode(),
+                    'phone_subscriber_number' => $phone->subscriberNumber(),
+                    'postal_code_first' => $address->postalCode()->first(),
+                    'postal_code_second' => $address->postalCode()->second(),
+                    'prefecture' => $address->prefecture->value,
+                    'city' => $address->city(),
+                    'street' => $address->street(),
+                    'building' => $address->building(),
+                    'email' => $user->email()->value(),
+                    'password' => $user->password(),
+                    'role' => $user->role->name,
+                ]
+            );
     }
 
     /**
@@ -61,8 +61,8 @@ class EloquentUserRepository implements UserRepository
     public function find(UserIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->where('identifier', $identifier->value())
+            ->first();
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('User not found: %s', $identifier->value()));
@@ -77,9 +77,9 @@ class EloquentUserRepository implements UserRepository
     public function list(): Enumerable
     {
         return $this->createQuery()
-          ->where('deleted_at', null)
-          ->get()
-          ->map(fn (Record $record): Entity => $this->restoreEntity($record));
+            ->where('deleted_at', null)
+            ->get()
+            ->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }
 
     /**

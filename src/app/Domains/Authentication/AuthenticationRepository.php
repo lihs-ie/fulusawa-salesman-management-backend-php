@@ -6,7 +6,6 @@ use App\Domains\Authentication\Entities\Authentication;
 use App\Domains\Authentication\ValueObjects\AuthenticationIdentifier;
 use App\Domains\Authentication\ValueObjects\Token;
 use App\Domains\Common\ValueObjects\MailAddress;
-use Illuminate\Support\Enumerable;
 
 /**
  * 認証リポジトリ
@@ -20,6 +19,9 @@ interface AuthenticationRepository
      * @param MailAddress $email
      * @param string $password
      * @return Authentication
+     *
+     * @throws \AuthorizationException メールアドレスまたはパスワードが不正な場合
+     * @throws \UniqueConstraintViolationException テーブルに既に識別子が使用されている場合
      */
     public function persist(AuthenticationIdentifier $identifier, MailAddress $email, string $password): Authentication;
 
@@ -28,6 +30,8 @@ interface AuthenticationRepository
      *
      * @param AuthenticationIdentifier $identifier
      * @return Authentication
+     *
+     * @throws \OutOfBoundsException 認証情報が存在しない場合
      */
     public function find(AuthenticationIdentifier $identifier): Authentication;
 
@@ -36,6 +40,8 @@ interface AuthenticationRepository
      *
      * @param Token $token
      * @return bool
+     *
+     * @throws InvalidTokenException トークンが不正な場合
      */
     public function introspection(Token $token): bool;
 
@@ -45,9 +51,7 @@ interface AuthenticationRepository
      * @param Token $token
      * @return Authentication
      *
-     * @throws \UnexpectedValueException トークン種別がリフレッシュトークンでない場合|トークンが有効期限切れの場合
-     * @throws \OutOfBoundsException トークンが存在しない場合
-     * @throws \RuntimeException トークンが既に使用済みの場合
+     * @throws InvalidTokenException トークンが不正な場合
      */
     public function refresh(Token $token): Authentication;
 
@@ -56,6 +60,18 @@ interface AuthenticationRepository
      *
      * @param Token $token
      * @return void
+     *
+     * @throws InvalidTokenException トークンが不正な場合
      */
     public function revoke(Token $token): void;
+
+    /**
+     * ログアウトする
+     *
+     * @param AuthenticationIdentifier $identifier
+     * @return void
+     *
+     * @throws \OutOfBoundsException 認証情報が存在しない場合
+     */
+    public function logout(AuthenticationIdentifier $identifier): void;
 }

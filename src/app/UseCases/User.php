@@ -99,8 +99,8 @@ class User
     private function convertRole(string $role): Role
     {
         return match ($role) {
-            '1' => Role::ADMIN,
-            '2' => Role::USER,
+            Role::ADMIN->name => Role::ADMIN,
+            Role::USER->name => Role::USER,
         };
     }
 }

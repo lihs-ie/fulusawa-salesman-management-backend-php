@@ -23,12 +23,14 @@ class Authentication extends SanctumPersonalAccessToken
         'tokenable_id',
         'tokenable_type',
         'name',
-        'access_token',
-        'access_token_expires_at',
+        'token',
+        'expires_at',
         'refresh_token',
         'refresh_token_expires_at',
         'abilities',
         'last_used_at',
+        'created_at',
+        'updated_at',
     ];
 
     /**

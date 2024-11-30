@@ -37,20 +37,26 @@ class EloquentScheduleRepository implements ScheduleRepository
      */
     public function persist(Entity $schedule): void
     {
+        $repeat = \is_null($schedule->repeat()) ? null : \json_encode([
+            'type' => $schedule->repeat()->type()->name,
+            'interval' => $schedule->repeat()->interval(),
+        ]);
+
         $this->createQuery()
-          ->updateOrCreate(
-              ['identifier' => $schedule->identifier()->value()],
-              [
-              'identifier' => $schedule->identifier()->value(),
-              'user' => $schedule->user()->value(),
-              'customer' => $schedule->customer()?->value(),
-              'title' => $schedule->title(),
-              'description' => $schedule->description(),
-              'start' => $schedule->date()->start()->toAtomString(),
-              'end' => $schedule->date()->end()->toAtomString(),
-              'status' => $schedule->status()->name,
-        ]
-          );
+            ->updateOrCreate(
+                ['identifier' => $schedule->identifier()->value()],
+                [
+                    'identifier' => $schedule->identifier()->value(),
+                    'user' => $schedule->user()->value(),
+                    'customer' => $schedule->customer()?->value(),
+                    'title' => $schedule->title(),
+                    'description' => $schedule->description(),
+                    'start' => $schedule->date()->start()->toAtomString(),
+                    'end' => $schedule->date()->end()->toAtomString(),
+                    'status' => $schedule->status()->name,
+                    'repeat' => $repeat,
+                ]
+            );
     }
 
     /**
@@ -59,8 +65,8 @@ class EloquentScheduleRepository implements ScheduleRepository
     public function find(ScheduleIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->where('identifier', $identifier->value())
+            ->first();
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('Schedule not found: %s', $identifier->value()));
@@ -75,31 +81,31 @@ class EloquentScheduleRepository implements ScheduleRepository
     public function list(Criteria $criteria): Enumerable
     {
         $records = $this->createQuery()
-          ->when(
-              !\is_null($criteria->status()),
-              fn (Builder $query): Builder => $query->where('status', $criteria->status()->name)
-          )
-          ->when(
-              !\is_null($criteria->date()),
-              function (Builder $query) use ($criteria): Builder {
-                  $date = $criteria->date();
+            ->when(
+                !\is_null($criteria->status()),
+                fn (Builder $query): Builder => $query->where('status', $criteria->status()->name)
+            )
+            ->when(
+                !\is_null($criteria->date()),
+                function (Builder $query) use ($criteria): Builder {
+                    $date = $criteria->date();
 
-                  if (!\is_null($date->start())) {
-                      $query->where('start', '>=', $date->start()->toAtomString());
-                  }
+                    if (!\is_null($date->start())) {
+                        $query->where('start', '>=', $date->start()->toAtomString());
+                    }
 
-                  if (!\is_null($date->end())) {
-                      $query->where('end', '<=', $date->end()->toAtomString());
-                  }
+                    if (!\is_null($date->end())) {
+                        $query->where('end', '<=', $date->end()->toAtomString());
+                    }
 
-                  return $query;
-              }
-          )
-          ->when(
-              !\is_null($criteria->title()),
-              fn (Builder $query): Builder => $query->whereLike('title', $criteria->title())
-          )
-          ->get();
+                    return $query;
+                }
+            )
+            ->when(
+                !\is_null($criteria->title()),
+                fn (Builder $query): Builder => $query->whereLike('title', $criteria->title())
+            )
+            ->get();
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }
@@ -110,8 +116,8 @@ class EloquentScheduleRepository implements ScheduleRepository
     public function ofUser(UserIdentifier $identifier): Enumerable
     {
         $records = $this->createQuery()
-          ->where('user', $identifier->value())
-          ->get();
+            ->where('user', $identifier->value())
+            ->get();
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }
@@ -122,8 +128,8 @@ class EloquentScheduleRepository implements ScheduleRepository
     public function delete(ScheduleIdentifier $identifier): void
     {
         $target = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->where('identifier', $identifier->value())
+            ->first();
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Schedule not found: %s', $identifier->value()));

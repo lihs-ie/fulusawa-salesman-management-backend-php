@@ -6,6 +6,7 @@ use App\Domains\Cemetery\CemeteryRepository;
 use App\Domains\Cemetery\Entities\Cemetery as Entity;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
 use App\Domains\Cemetery\ValueObjects\CemeteryType;
+use App\Domains\Cemetery\ValueObjects\Criteria;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\UseCases\Cemetery as UseCase;
 use App\UseCases\Factories\CommonDomainFactory;
@@ -53,7 +54,7 @@ class CemeteryTest extends TestCase
             'identifier' => Uuid::uuid7()->toString(),
             'customer' => Uuid::uuid7()->toString(),
             'name' => Str::random(\mt_rand(1, 255)),
-            'type' => Collection::make(['1', '2', '3', '4'])->random(),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->format('Y-m-d H:i:s'),
             'inHouse' => (bool) \mt_rand(0, 1)
         ];
@@ -87,7 +88,7 @@ class CemeteryTest extends TestCase
             'identifier' => $target->identifier()->value(),
             'customer' => Uuid::uuid7()->toString(),
             'name' => Str::random(\mt_rand(1, 255)),
-            'type' => Collection::make(['1', '2', '3'])->random(),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->format('Y-m-d H:i:s'),
             'inHouse' => (bool) \mt_rand(0, 1)
         ];
@@ -129,7 +130,7 @@ class CemeteryTest extends TestCase
 
         [$useCase] = $this->createPersistUseCase();
 
-        $actuals = $useCase->list();
+        $actuals = $useCase->list([]);
 
         $expecteds
             ->zip($actuals)
@@ -279,10 +280,10 @@ class CemeteryTest extends TestCase
     private function convertCemeteryType(string $type): CemeteryType
     {
         return match ($type) {
-            '1' => CemeteryType::INDIVIDUAL,
-            '2' => CemeteryType::FAMILY,
-            '3' => CemeteryType::COMMUNITY,
-            '4' => CemeteryType::OTHER,
+            CemeteryType::INDIVIDUAL->name => CemeteryType::INDIVIDUAL,
+            CemeteryType::FAMILY->name => CemeteryType::FAMILY,
+            CemeteryType::COMMUNITY->name => CemeteryType::COMMUNITY,
+            CemeteryType::OTHER->name => CemeteryType::OTHER,
         };
     }
 }

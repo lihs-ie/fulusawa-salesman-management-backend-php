@@ -46,12 +46,14 @@ class InfrastructureProvider extends ServiceProvider
             $this->app->singleton($interface, $implementation);
         }
 
-        $this->app->singleton(AuthenticationRepository::class, new EloquentAuthenticationRepository(
-            new Authentication(),
-            new User(),
-            \config('sanctum.access_token_ttl'),
-            \config('sanctum.refresh_token_ttl'),
-        ));
+        $this->app->singleton(AuthenticationRepository::class, function (): AuthenticationRepository {
+            return new EloquentAuthenticationRepository(
+                new Authentication(),
+                new User(),
+                \config('sanctum.access_token_ttl'),
+                \config('sanctum.refresh_token_ttl'),
+            );
+        });
     }
 
     /**

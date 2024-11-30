@@ -24,6 +24,7 @@ class Feedback extends Model
         'type',
         'status',
         'content',
+        'created_at',
         'updated_at',
     ];
 }

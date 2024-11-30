@@ -30,7 +30,7 @@ class Authentication
      * @param string $identifier
      * @param string $email
      * @param string $password
-     * @return string
+     * @return Entity
      */
     public function persist(string $identifier, string $email, string $password): Entity
     {
@@ -72,6 +72,17 @@ class Authentication
     public function revoke(array $token): void
     {
         $this->repository->revoke($this->extractToken($token));
+    }
+
+    /**
+     * ログアウトする
+     *
+     * @param string $identifier
+     * @return void
+     */
+    public function logout(string $identifier): void
+    {
+        $this->repository->logout(new AuthenticationIdentifier($identifier));
     }
 
     /**
