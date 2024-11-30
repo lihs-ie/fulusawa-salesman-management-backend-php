@@ -25,9 +25,9 @@ class Cemetery
     }
 
     /**
-     * 墓地情報を永続化する
+     * 新規の墓地情報を永続化する
      *
-     * @param string|null $identifier
+     * @param string $identifier
      * @param string $customer
      * @param string $name
      * @param string $type
@@ -35,7 +35,7 @@ class Cemetery
      * @param boolean $inHouse
      * @return void
      */
-    public function persist(
+    public function add(
         string $identifier,
         string $customer,
         string $name,
@@ -52,7 +52,38 @@ class Cemetery
             inHouse: $inHouse,
         );
 
-        $this->repository->persist($entity);
+        $this->repository->add($entity);
+    }
+
+    /**
+     * 墓地情報を更新する
+     *
+     * @param string $identifier
+     * @param string $customer
+     * @param string $name
+     * @param string $type
+     * @param string $construction
+     * @param boolean $inHouse
+     * @return void
+     */
+    public function update(
+        string $identifier,
+        string $customer,
+        string $name,
+        string $type,
+        string $construction,
+        bool $inHouse,
+    ): void {
+        $entity = new Entity(
+            identifier: new CemeteryIdentifier($identifier),
+            customer: new CustomerIdentifier($customer),
+            name: $name,
+            construction: CarbonImmutable::parse($construction),
+            type: $this->convertCemeteryType($type),
+            inHouse: $inHouse,
+        );
+
+        $this->repository->update($entity);
     }
 
     /**

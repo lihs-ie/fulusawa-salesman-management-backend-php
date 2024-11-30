@@ -4,19 +4,24 @@ namespace Tests\Unit\Http\Controllers\API;
 
 use App\Domains\Cemetery\Entities\Cemetery as Entity;
 use App\Domains\Cemetery\ValueObjects\CemeteryType;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\API\CemeteryController;
 use App\Http\Encoders\Cemetery\CemeteryEncoder;
+use App\Http\Requests\API\Cemetery\AddRequest;
 use App\Http\Requests\API\Cemetery\DeleteRequest;
 use App\Http\Requests\API\Cemetery\FindRequest;
 use App\Http\Requests\API\Cemetery\ListRequest;
 use App\Http\Requests\API\Cemetery\PersistRequest;
+use App\Http\Requests\API\Cemetery\UpdateRequest;
 use App\UseCases\Cemetery as UseCase;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\Support\DependencyBuildable;
 use Tests\Support\Helpers\Http\RequestGeneratable;
@@ -80,6 +85,242 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
+     * @testdox testAddReturnsResponse addメソッドで墓地情報を永続化できること.
+     */
+    public function testAddReturnsResponse(): void
+    {
+        $controller = new CemeteryController();
+
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => Str::random(\mt_rand(1, 255)),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
+            'construction' => CarbonImmutable::now()->toAtomString(),
+            'inHouse' => (bool) \mt_rand(0, 1)
+        ];
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload);
+
+        $request = $this->createJsonRequest(
+            AddRequest::class,
+            $payload
+        );
+
+        $actual = $controller->add($request, $useCase);
+
+        $this->assertInstanceOf(Response::class, $actual);
+        $this->assertSame(Response::HTTP_CREATED, $actual->getStatusCode());
+    }
+
+    /**
+     * @testdox testAddThrowsBadRequestWithInvalidPayload createメソッドに不正な値が与えられたときBadRequestExceptionがスローされること.
+     */
+    public function testAddThrowsBadRequestWithInvalidPayload(): void
+    {
+        $controller = new CemeteryController();
+
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => Str::random(\mt_rand(1, 255)),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
+            'construction' => CarbonImmutable::now()->toAtomString(),
+            'inHouse' => (bool) \mt_rand(0, 1)
+        ];
+
+        $request = $this->createJsonRequest(
+            AddRequest::class,
+            $payload
+        );
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException());
+
+        $this->expectException(BadRequestException::class);
+
+        $controller->add($request, $useCase);
+    }
+
+    /**
+     * @testdox testAddThrowsBadRequestWithUnexpectedValue createメソッドに不正な値が与えられたときBadRequestExceptionがスローされること.
+     */
+    public function testAddThrowsBadRequestWithUnexpectedValue(): void
+    {
+        $controller = new CemeteryController();
+
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => Str::random(\mt_rand(1, 255)),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
+            'construction' => CarbonImmutable::now()->toAtomString(),
+            'inHouse' => (bool) \mt_rand(0, 1)
+        ];
+
+        $request = $this->createJsonRequest(
+            AddRequest::class,
+            $payload
+        );
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \UnexpectedValueException());
+
+        $this->expectException(BadRequestException::class);
+
+        $controller->add($request, $useCase);
+    }
+
+    /**
+     * @testdox testAddThrowsConflictHttpExceptionWithConflictException createメソッドで識別子の競合が発生したときConflictHttpExceptionがスローされること.
+     */
+    public function testAddThrowsConflictHttpExceptionWithConflictException(): void
+    {
+        $controller = new CemeteryController();
+
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => Str::random(\mt_rand(1, 255)),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
+            'construction' => CarbonImmutable::now()->toAtomString(),
+            'inHouse' => (bool) \mt_rand(0, 1)
+        ];
+
+        $request = $this->createJsonRequest(
+            AddRequest::class,
+            $payload
+        );
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new ConflictException());
+
+        $this->expectException(ConflictHttpException::class);
+
+        $controller->add($request, $useCase);
+    }
+
+    /**
+     * @testdox testUpdateReturnsResponse updateメソッドで既存の墓地情報を更新できること.
+     */
+    public function testUpdateReturnsResponse(): void
+    {
+        $controller = new CemeteryController();
+
+        $target = $this->instances->random();
+
+        $payload = [
+            'identifier' => $target->identifier()->value(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => Str::random(\mt_rand(1, 255)),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
+            'construction' => CarbonImmutable::now()->toAtomString(),
+            'inHouse' => (bool) \mt_rand(0, 1)
+        ];
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload);
+
+        $request = $this->createJsonRequest(
+            UpdateRequest::class,
+            $payload,
+            ['identifier' => $target->identifier()->value()]
+        );
+
+        $actual = $controller->update($request, $useCase);
+
+        $this->assertInstanceOf(Response::class, $actual);
+        $this->assertSame(Response::HTTP_NO_CONTENT, $actual->getStatusCode());
+    }
+
+    /**
+     * @testdox testUpdateThrowsBadRequestWhenInvalidPayload updateメソッドで不正なペイロードが指定された場合はBadRequestExceptionがスローされること.
+     */
+    public function testUpdateThrowsBadRequestWhenInvalidPayload(): void
+    {
+        $controller = new CemeteryController();
+
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => Str::random(\mt_rand(1, 255)),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
+            'construction' => CarbonImmutable::now()->toAtomString(),
+            'inHouse' => (bool) \mt_rand(0, 1)
+        ];
+
+        $request = $this->createJsonRequest(
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $payload['identifier']]
+        );
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException());
+
+        $this->expectException(BadRequestException::class);
+
+        $controller->update($request, $useCase);
+    }
+
+    /**
+     * @testdox testUpdateThrowsNotFoundWhenMissingIdentifier updateメソッドで存在しない識別子が指定された場合はNotFoundHttpExceptionがスローされること.
+     */
+    public function testUpdateThrowsNotFoundWhenMissingIdentifier(): void
+    {
+        $controller = new CemeteryController();
+
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => Str::random(\mt_rand(1, 255)),
+            'type' => Collection::make(CemeteryType::cases())->random()->name,
+            'construction' => CarbonImmutable::now()->toAtomString(),
+            'inHouse' => (bool) \mt_rand(0, 1)
+        ];
+
+        $request = $this->createJsonRequest(
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $payload['identifier']]
+        );
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \OutOfBoundsException());
+
+        $this->expectException(NotFoundHttpException::class);
+
+        $controller->update($request, $useCase);
+    }
+
+    /**
      * @testdox testListReturnsSuccessfulResponse listメソッドで墓地情報の一覧を取得できること.
      */
     public function testListReturnsSuccessfulResponse(): void
@@ -89,9 +330,14 @@ class CemeteryControllerTest extends TestCase
         $expected = $this->instances->map(
             fn (Entity $entity): array => $this->encoder->encode($entity)
         )
-          ->all();
+            ->all();
 
-        $useCase = $this->createUseCase('list', $this->instances);
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('list')
+            ->with([])
+            ->willReturn($this->instances);
 
         $request = $this->createGetRequest(
             class: ListRequest::class,
@@ -104,14 +350,19 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * @testdox testFindReturnsSuccessfulResponse findメソッドで指定した墓地情報を取得できること.
+     * @testdox testFindReturnsResponse findメソッドで指定した識別子の墓地情報を取得できること.
      */
-    public function testFindReturnsSuccessfulResponse(): void
+    public function testFindReturnsResponse(): void
     {
         $target = $this->instances->random();
         $expected = $this->encoder->encode($target);
 
-        $useCase = $this->createUseCase('find', $target);
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('find')
+            ->with($target->identifier()->value())
+            ->willReturn($target);
 
         $controller = new CemeteryController();
 
@@ -121,13 +372,9 @@ class CemeteryControllerTest extends TestCase
             ['identifier' => $target->identifier()->value()]
         );
 
-        $actual = $controller->find(
-            $request,
-            $useCase,
-            $this->encoder
-        );
+        $actual = $controller->find($request, $useCase, $this->encoder);
 
-        $this->assertSame($expected, $actual['cemetery']);
+        $this->assertSame($expected, $actual);
     }
 
     /**
@@ -137,26 +384,24 @@ class CemeteryControllerTest extends TestCase
     {
         $controller = new CemeteryController();
 
-        $request = $this->createMock(FindRequest::class);
-        $request
-          ->expects($this->once())
-          ->method('validated')
-          ->willReturn(['identifier' => 'invalid']);
+        $identifier = Uuid::uuid7()->toString();
 
-        $useCase = $this->createUseCase(
-            'find',
-            null,
-            ['identifier' => 'invalid'],
-            new \InvalidArgumentException()
+        $request = $this->createGetRequest(
+            class: FindRequest::class,
+            query: [],
+            routeParameters: ['identifier' => $identifier]
         );
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('find')
+            ->with($identifier)
+            ->willThrowException(new \InvalidArgumentException());
 
         $this->expectException(BadRequestException::class);
 
-        $controller->find(
-            $request,
-            $useCase,
-            $this->encoder
-        );
+        $controller->find($request, $useCase, $this->encoder);
     }
 
     /**
@@ -174,196 +419,16 @@ class CemeteryControllerTest extends TestCase
             ['identifier' => $missing]
         );
 
-        $useCase = $this->createUseCase(
-            'find',
-            null,
-            ['identifier' => $missing],
-            new \OutOfBoundsException()
-        );
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('find')
+            ->with($missing)
+            ->willThrowException(new \OutOfBoundsException());
 
         $this->expectException(NotFoundHttpException::class);
 
-        $controller->find(
-            $request,
-            $useCase,
-            $this->encoder
-        );
-    }
-
-    /**
-     * @testdox testCreateReturnsSuccessfulResponse createメソッドで新規の墓地情報を作成できること.
-     */
-    public function testCreateReturnsSuccessfulResponse(): void
-    {
-        $controller = new CemeteryController();
-
-        $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'customer' => Uuid::uuid7()->toString(),
-          'name' => Str::random(\mt_rand(1, 255)),
-          'type' => Collection::make(CemeteryType::cases())->random()->name,
-          'construction' => CarbonImmutable::now()->toAtomString(),
-          'inHouse' => (bool) \mt_rand(0, 1)
-        ];
-
-        $useCase = $this->createUseCase('persist');
-
-        $request = $this->createJsonRequest(
-            PersistRequest::class,
-            $payload
-        );
-
-        $actual = $controller->create(
-            $request,
-            $useCase
-        );
-
-        $this->assertSame(201, $actual->getStatusCode());
-        $this->assertSame('', $actual->getContent());
-    }
-
-    /**
-     * @testdox testCreateThrowsBadRequestWhenInvalidPayload createメソッドで不正なペイロードが指定された場合はBadRequestExceptionがスローされること.
-     */
-    public function testCreateThrowsBadRequestWhenInvalidPayload(): void
-    {
-        $controller = new CemeteryController();
-
-        $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'customer' => Uuid::uuid7()->toString(),
-          'name' => Str::random(\mt_rand(1, 255)),
-          'type' => Collection::make(CemeteryType::cases())->random()->name,
-          'construction' => CarbonImmutable::now()->toAtomString(),
-          'inHouse' => (bool) \mt_rand(0, 1)
-        ];
-
-        $request = $this->createJsonRequest(
-            PersistRequest::class,
-            $payload
-        );
-
-        $useCase = $this->createUseCase(
-            'persist',
-            null,
-            [...$payload],
-            new \InvalidArgumentException()
-        );
-
-        $this->expectException(BadRequestException::class);
-
-        $controller->create(
-            $request,
-            $useCase
-        );
-    }
-
-    /**
-     * @testdox testUpdateReturnsSuccessfulResponse updateメソッドで既存の墓地情報を更新できること.
-     */
-    public function testUpdateReturnsSuccessfulResponse(): void
-    {
-        $controller = new CemeteryController();
-
-        $target = $this->instances->random();
-
-        $payload = [
-          'identifier' => $target->identifier()->value(),
-          'customer' => Uuid::uuid7()->toString(),
-          'name' => Str::random(\mt_rand(1, 255)),
-          'type' => Collection::make(CemeteryType::cases())->random()->name,
-          'construction' => CarbonImmutable::now()->toAtomString(),
-          'inHouse' => (bool) \mt_rand(0, 1)
-        ];
-
-        $useCase = $this->createUseCase('persist');
-
-        $request = $this->createJsonRequest(
-            PersistRequest::class,
-            $payload
-        );
-
-        $actual = $controller->update(
-            $request,
-            $useCase
-        );
-
-        $this->assertSame(204, $actual->getStatusCode());
-        $this->assertSame('', $actual->getContent());
-    }
-
-    /**
-     * @testdox testUpdateThrowsBadRequestWhenInvalidPayload updateメソッドで不正なペイロードが指定された場合はBadRequestExceptionがスローされること.
-     */
-    public function testUpdateThrowsBadRequestWhenInvalidPayload(): void
-    {
-        $controller = new CemeteryController();
-
-        $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'customer' => Uuid::uuid7()->toString(),
-          'name' => Str::random(\mt_rand(1, 255)),
-          'type' => Collection::make(CemeteryType::cases())->random()->name,
-          'construction' => CarbonImmutable::now()->toAtomString(),
-          'inHouse' => (bool) \mt_rand(0, 1)
-        ];
-
-        $request = $this->createJsonRequest(
-            PersistRequest::class,
-            $payload
-        );
-
-        $useCase = $this->createUseCase(
-            'persist',
-            null,
-            [...$payload],
-            new \InvalidArgumentException()
-        );
-
-        $this->expectException(BadRequestException::class);
-
-        $controller->update(
-            $request,
-            $useCase
-        );
-    }
-
-    /**
-     * @testdox testUpdateThrowsNotFoundWhenMissingIdentifier updateメソッドで存在しない識別子が指定された場合はNotFoundHttpExceptionがスローされること.
-     */
-    public function testUpdateThrowsNotFoundWhenMissingIdentifier(): void
-    {
-        $controller = new CemeteryController();
-
-        $missing = Uuid::uuid7()->toString();
-
-        $payload = [
-          'identifier' => $missing,
-          'customer' => Uuid::uuid7()->toString(),
-          'name' => Str::random(\mt_rand(1, 255)),
-          'type' => Collection::make(CemeteryType::cases())->random()->name,
-          'construction' => CarbonImmutable::now()->toAtomString(),
-          'inHouse' => (bool) \mt_rand(0, 1)
-        ];
-
-        $request = $this->createJsonRequest(
-            PersistRequest::class,
-            $payload
-        );
-
-        $useCase = $this->createUseCase(
-            'persist',
-            null,
-            [...$payload],
-            new \OutOfBoundsException()
-        );
-
-        $this->expectException(NotFoundHttpException::class);
-
-        $controller->update(
-            $request,
-            $useCase
-        );
+        $controller->find($request, $useCase, $this->encoder);
     }
 
     /**
@@ -381,18 +446,16 @@ class CemeteryControllerTest extends TestCase
             routeParameters: ['identifier' => $target->identifier()->value()]
         );
 
-        $useCase = $this->createUseCase(
-            method: 'delete',
-            arguments: [$target->identifier()->value()]
-        );
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('delete')
+            ->with($target->identifier()->value());
 
-        $actual = $controller->delete(
-            $request,
-            $useCase
-        );
+        $actual = $controller->delete($request, $useCase);
 
-        $this->assertSame(200, $actual->getStatusCode());
-        $this->assertSame('', $actual->getContent());
+        $this->assertInstanceOf(Response::class, $actual);
+        $this->assertSame(Response::HTTP_NO_CONTENT, $actual->getStatusCode());
     }
 
     /**
@@ -410,18 +473,16 @@ class CemeteryControllerTest extends TestCase
             routeParameters: ['identifier' => $missing]
         );
 
-        $useCase = $this->createUseCase(
-            method: 'delete',
-            arguments: [$missing],
-            exception: new \OutOfBoundsException()
-        );
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('delete')
+            ->with($missing)
+            ->willThrowException(new \OutOfBoundsException());
 
         $this->expectException(NotFoundHttpException::class);
 
-        $controller->delete(
-            $request,
-            $useCase
-        );
+        $controller->delete($request, $useCase);
     }
 
     /**
@@ -431,24 +492,24 @@ class CemeteryControllerTest extends TestCase
     {
         $controller = new CemeteryController();
 
-        $request = $this->createMock(DeleteRequest::class);
-        $request
-          ->expects($this->once())
-          ->method('validated')
-          ->willReturn(['identifier' => 'invalid']);
+        $identifier = Uuid::uuid7()->toString();
 
-        $useCase = $this->createUseCase(
-            method: 'delete',
-            arguments: ['invalid'],
-            exception: new \InvalidArgumentException()
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('delete')
+            ->with($identifier)
+            ->willThrowException(new \InvalidArgumentException());
+
+        $request = $this->createJsonRequest(
+            class: DeleteRequest::class,
+            payload: [],
+            routeParameters: ['identifier' => $identifier]
         );
 
         $this->expectException(BadRequestException::class);
 
-        $controller->delete(
-            $request,
-            $useCase
-        );
+        $controller->delete($request, $useCase);
     }
 
     /**
@@ -457,35 +518,5 @@ class CemeteryControllerTest extends TestCase
     private function createInstances(): Enumerable
     {
         return $this->builder()->createList(Entity::class, \mt_rand(5, 10));
-    }
-
-    /**
-     * テストに使用するユースケースを生成する.
-     */
-    private function createUseCase(
-        string $method,
-        mixed $returns = null,
-        array $arguments = [],
-        ?\Exception $exception = null
-    ): UseCase {
-        $useCase = $this->createMock(UseCase::class);
-
-        if ($returns) {
-            $useCase
-              ->expects($this->once())
-              ->method($method)
-              ->with(...$arguments)
-              ->willReturn($returns);
-        }
-
-        if ($exception) {
-            $useCase
-              ->expects($this->once())
-              ->method($method)
-              ->with(...$arguments)
-              ->willThrowException($exception);
-        }
-
-        return $useCase;
     }
 }

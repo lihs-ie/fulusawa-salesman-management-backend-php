@@ -2,6 +2,7 @@
 
 namespace App\Infrastructures\Cemetery\Models;
 
+use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
 use App\Domains\Cemetery\ValueObjects\Criteria;
 use App\Infrastructures\Customer\Models\Customer;
 use Illuminate\Database\Eloquent\Builder;
@@ -46,5 +47,13 @@ class Cemetery extends Model
         if ($criteria->customer) {
             $query->where('customer', $criteria->customer->value);
         }
+    }
+
+    /**
+     * 墓地情報識別子に一致するレコードを取得する
+     */
+    public function scopeOfIdentifier(Builder $query, CemeteryIdentifier $identifier)
+    {
+        return $query->where('identifier', $identifier->value());
     }
 }

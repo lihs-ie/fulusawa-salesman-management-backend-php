@@ -6,7 +6,6 @@ use App\Domains\Cemetery\CemeteryRepository;
 use App\Domains\Cemetery\Entities\Cemetery;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
 use App\Domains\Cemetery\ValueObjects\Criteria;
-use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use Closure;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuilder;
@@ -19,6 +18,8 @@ class CemeteryRepositoryFactory extends DependencyFactory
 {
     /**
      * {@inheritdoc}
+     *
+     * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
      */
     public function create(DependencyBuilder $builder, int $seed, array $overrides): CemeteryRepository
     {
@@ -42,11 +43,34 @@ class CemeteryRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function persist(Cemetery $cemetery): void
+            public function add(Cemetery $cemetery): void
             {
                 $key = $this->keyOf($cemetery->identifier());
 
                 $this->instances = clone $this->instances->put($key, $cemetery);
+
+                if ($callback = $this->onPersist) {
+                    $callback($cemetery);
+                }
+            }
+
+            /**
+             * {@inheritdoc}
+             */
+            public function update(Cemetery $cemetery): void
+            {
+                $target = $this->instances->first(
+                    fn (Cemetery $instance): bool => $instance->identifier()->equals($cemetery->identifier())
+                );
+
+                if (\is_null($target)) {
+                    throw new \OutOfBoundsException(\sprintf('Cemetery not found. identifier: %s', $cemetery->identifier()->value()));
+                }
+
+                $this->instances = clone $this->instances->put(
+                    $this->keyOf($cemetery->identifier()),
+                    $cemetery
+                );
 
                 if ($callback = $this->onPersist) {
                     $callback($cemetery);

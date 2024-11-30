@@ -7,9 +7,11 @@ use App\Domains\Cemetery\Entities\Cemetery as Entity;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
 use App\Domains\Cemetery\ValueObjects\Criteria;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
+use App\Exceptions\ConflictException;
 use App\Infrastructures\Cemetery\EloquentCemeteryRepository;
 use App\Infrastructures\Cemetery\Models\Cemetery as Record;
 use Illuminate\Support\Enumerable;
+use Ramsey\Uuid\Uuid;
 use Tests\Support\DependencyBuildable;
 use Tests\TestCase;
 use Tests\Unit\Infrastructures\EloquentRepositoryTest;
@@ -27,9 +29,9 @@ class EloquentCemeteryRepositoryTest extends TestCase
     use EloquentRepositoryTest;
 
     /**
-     * @testdox testPersistSuccessOnCreate persistメソッドで新規の墓地情報を永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドで新規の墓地情報を永続化できること.
      */
-    public function testPersistSuccessOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $record = $this->pickRecord();
 
@@ -37,32 +39,96 @@ class EloquentCemeteryRepositoryTest extends TestCase
 
         $repository = $this->createRepository();
 
-        $repository->persist($entity);
+        $repository->add($entity);
 
         $this->assertPersistedRecord($entity);
     }
 
     /**
-     * @testdox testPersistSuccessOnUpdate persistメソッドで既存の墓地情報を更新できること.
+     * @testdox testAddThrowsConflictExceptionDuplicateIdentifier addメソッドで重複した識別子の墓地情報を与えたときConflictExceptionが投げられること.
      */
-    public function testPersistSuccessOnUpdate(): void
+    public function testAddThrowsConflictExceptionDuplicateIdentifier(): void
     {
         $record = $this->pickRecord();
 
         $expected = $this->createEntity(
             identifier: $record->identifier,
-            customer: $record->customer,
         );
 
         $repository = $this->createRepository();
 
-        $repository->persist($expected);
+        $this->expectException(ConflictException::class);
 
-        $this->assertPersistedRecord($expected);
+        $repository->add($expected);
     }
 
     /**
-     * @testdox testFindSuccessReturnsEntity findメソッドで墓地情報を取得できること.
+     * @testdox testAddThrowsUnexpectedValueExceptionWithMissingCustomer addメソッドに存在しない顧客識別子を含む墓地情報を与えたときUnexpectedValueExceptionが投げられること.
+     */
+    public function testAddThrowsUnexpectedValueExceptionWithMissingCustomer(): void
+    {
+        $expected = $this->createEntity();
+
+        $repository = $this->createRepository();
+
+        $this->expectException(\UnexpectedValueException::class);
+
+        $repository->add($expected);
+    }
+
+    /**
+     * @testdox testUpdateSuccessPersistEntity updateメソッドで墓地情報を更新できること.
+     */
+    public function testUpdateSuccessPersistEntity(): void
+    {
+        $record = $this->pickRecord();
+
+        $entity = $this->createEntity(
+            identifier: $record->identifier,
+            customer: $record->customer
+        );
+
+        $repository = $this->createRepository();
+
+        $repository->update($entity);
+
+        $this->assertPersistedRecord($entity);
+    }
+
+    /**
+     * @testdox testUpdateThrowsOutOfBoundsExceptionWithMissingIdentifier updateメソッドで存在しない墓地情報を指定したときOutOfBoundsExceptionが投げられること.
+     */
+    public function testUpdateThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
+    {
+        $expected = $this->createEntity();
+
+        $repository = $this->createRepository();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $repository->update($expected);
+    }
+
+    /**
+     * @testdox testUpdateThrowsUnexpectedValueExceptionWithMissingCustomer updateメソッドに存在しない顧客識別子を含む墓地情報を与えたときUnexpectedValueExceptionが投げられること.
+     */
+    public function testUpdateThrowsUnexpectedValueExceptionWithMissingCustomer(): void
+    {
+        $record = $this->pickRecord();
+
+        $expected = $this->createEntity(
+            identifier: $record->identifier,
+        );
+
+        $repository = $this->createRepository();
+
+        $this->expectException(\UnexpectedValueException::class);
+
+        $repository->update($expected);
+    }
+
+    /**
+     * @testdox testFindSuccessReturnsEntity findメソッドで指定した識別子の墓地情報を取得できること.
      */
     public function testFindSuccessReturnsEntity(): void
     {
@@ -76,20 +142,17 @@ class EloquentCemeteryRepositoryTest extends TestCase
     }
 
     /**
-     * @testdox testOfCustomerSuccessReturnsEntities ofCustomerメソッドで指定した顧客の墓地情報のリストを取得できること.
+     * @testdox testFindThrowsOutOfBoundsExceptionWithMissingIdentifier findメソッドで存在しない墓地情報識別子を指定したときOutOfBoundsExceptionが投げられること.
      */
-    public function testOfCustomerSuccessReturnsEntities(): void
+    public function testFindThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
     {
-        $record = $this->pickRecord();
-
         $repository = $this->createRepository();
 
-        $actuals = $repository->ofCustomer(new CustomerIdentifier($record->customer));
+        $identifier = $this->builder()->create(CemeteryIdentifier::class);
 
-        $actuals->each(function (Entity $actual) use ($record): void {
-            $this->assertSame($record->customer, $actual->customer()->value());
-            $this->assertRecordProperties($actual);
-        });
+        $this->expectException(\OutOfBoundsException::class);
+
+        $repository->find($identifier);
     }
 
     /**
@@ -118,6 +181,32 @@ class EloquentCemeteryRepositoryTest extends TestCase
     }
 
     /**
+     * @testdox testDeleteSuccessRemoveEntity deleteメソッドで墓地情報を削除できること.
+     */
+    public function testDeleteSuccessRemoveEntity(): void
+    {
+        $record = $this->pickRecord();
+
+        $repository = $this->createRepository();
+
+        $repository->delete(new CemeteryIdentifier($record->identifier));
+
+        $this->assertDatabaseMissing('cemeteries', ['identifier' => $record->identifier]);
+    }
+
+    /**
+     * @testdox testDeleteThrowsOutOfBoundsExceptionWithMissingIdentifier deleteメソッドで存在しない墓地情報識別子を指定したときOutOfBoundsExceptionが投げられること.
+     */
+    public function testDeleteThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
+    {
+        $repository = $this->createRepository();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $repository->delete(new CemeteryIdentifier(Uuid::uuid7()->toString()));
+    }
+
+    /**
      * {@inheritDoc}
      */
     protected function createRecords(): Enumerable
@@ -136,7 +225,7 @@ class EloquentCemeteryRepositoryTest extends TestCase
     /**
      * エンティティを生成するへルパ.
      */
-    private function createEntity(string $customer, string $identifier = null): Entity
+    private function createEntity(string $customer = null, string $identifier = null): Entity
     {
         return $this->builder()->create(Entity::class, null, [
             'identifier' => $this->builder()->create(

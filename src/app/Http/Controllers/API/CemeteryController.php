@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\API;
 
 use App\Domains\Cemetery\Entities\Cemetery;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Encoders\Cemetery\CemeteryEncoder;
+use App\Http\Requests\API\Cemetery\AddRequest;
 use App\Http\Requests\API\Cemetery\DeleteRequest;
 use App\Http\Requests\API\Cemetery\FindRequest;
 use App\Http\Requests\API\Cemetery\ListRequest;
-use App\Http\Requests\API\Cemetery\PersistRequest;
+use App\Http\Requests\API\Cemetery\UpdateRequest;
 use App\UseCases\Cemetery as UseCase;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -20,56 +23,17 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 class CemeteryController extends Controller
 {
     /**
-     * 墓地情報一覧取得.
+     * 墓地情報追加.
      *
+     * @param AddRequest $request
      * @param UseCase $useCase
-     * @param CemeteryEncoder $encoder
-     * @return array
      */
-    public function list(ListRequest $request, UseCase $useCase, CemeteryEncoder $encoder)
-    {
-        $request->validated();
-
-        try {
-            $cemeteries = $useCase->list($request->all());
-
-            return [
-              'cemeteries' => $cemeteries->map(
-                  fn (Cemetery $cemetery): array => $encoder->encode($cemetery)
-              )->all()
-            ];
-        } catch (\InvalidArgumentException $exception) {
-            throw new BadRequestException($exception->getMessage());
-        }
-    }
-
-    /**
-     * 墓地情報取得.
-     */
-    public function find(FindRequest $request, UseCase $useCase, CemeteryEncoder $encoder)
+    public function add(AddRequest $request, UseCase $useCase)
     {
         $parameter = $request->validated();
 
         try {
-            $cemetery = $useCase->find($parameter['identifier']);
-
-            return ['cemetery' => $encoder->encode($cemetery)];
-        } catch (\InvalidArgumentException $exception) {
-            throw new BadRequestException($exception->getMessage());
-        } catch (\OutOfBoundsException $exception) {
-            throw new NotFoundHttpException($exception->getMessage());
-        }
-    }
-
-    /**
-     * 墓地情報作成.
-     */
-    public function create(PersistRequest $request, UseCase $useCase)
-    {
-        $parameter = $request->validated();
-
-        try {
-            $useCase->persist(
+            $useCase->add(
                 identifier: $parameter['identifier'],
                 customer: $parameter['customer'],
                 name: $parameter['name'],
@@ -81,20 +45,23 @@ class CemeteryController extends Controller
             return new Response('', Response::HTTP_CREATED);
         } catch (\InvalidArgumentException | \UnexpectedValueException $exception) {
             throw new BadRequestException($exception->getMessage());
-        } catch (\OutOfBoundsException $exception) {
-            throw new NotFoundHttpException($exception->getMessage());
+        } catch (ConflictException $exception) {
+            throw new ConflictHttpException($exception->getMessage());
         }
     }
 
     /**
      * 墓地情報更新.
+     *
+     * @param UpdateRequest $request
+     * @param UseCase $useCase
      */
-    public function update(PersistRequest $request, UseCase $useCase)
+    public function update(UpdateRequest $request, UseCase $useCase)
     {
         $parameter = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->update(
                 identifier: $parameter['identifier'],
                 customer: $parameter['customer'],
                 name: $parameter['name'],
@@ -112,18 +79,64 @@ class CemeteryController extends Controller
     }
 
     /**
+     * 墓地情報一覧取得.
+     *
+     * @param UseCase $useCase
+     * @param CemeteryEncoder $encoder
+     */
+    public function list(ListRequest $request, UseCase $useCase, CemeteryEncoder $encoder)
+    {
+        $request->validated();
+
+        try {
+            $cemeteries = $useCase->list($request->all());
+
+            return [
+                'cemeteries' => $cemeteries->map(
+                    fn (Cemetery $cemetery): array => $encoder->encode($cemetery)
+                )->all()
+            ];
+        } catch (\InvalidArgumentException $exception) {
+            throw new BadRequestException($exception->getMessage());
+        }
+    }
+
+    /**
+     * 墓地情報取得.
+     *
+     * @param FindRequest $request
+     * @param UseCase $useCase
+     * @param CemeteryEncoder $encoder
+     */
+    public function find(FindRequest $request, UseCase $useCase, CemeteryEncoder $encoder)
+    {
+        $parameter = $request->validated();
+
+        try {
+            $cemetery = $useCase->find($parameter['identifier']);
+
+            return $encoder->encode($cemetery);
+        } catch (\InvalidArgumentException $exception) {
+            throw new BadRequestException($exception->getMessage());
+        } catch (\OutOfBoundsException $exception) {
+            throw new NotFoundHttpException($exception->getMessage());
+        }
+    }
+
+    /**
      * 墓地情報削除.
+     *
+     * @param DeleteRequest $request
+     * @param UseCase $useCase
      */
     public function delete(DeleteRequest $request, UseCase $useCase)
     {
         $parameter = $request->validated();
 
         try {
-            $useCase->delete(
-                identifier: $parameter['identifier']
-            );
+            $useCase->delete($parameter['identifier']);
 
-            return new Response('', Response::HTTP_OK);
+            return new Response('', Response::HTTP_NO_CONTENT);
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestException($exception->getMessage());
         } catch (\OutOfBoundsException $exception) {

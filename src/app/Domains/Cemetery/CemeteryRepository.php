@@ -13,12 +13,26 @@ use Illuminate\Support\Enumerable;
 interface CemeteryRepository
 {
     /**
-     * 墓地情報を永続化する
+     * 新規の墓地情報を永続化する
      *
      * @param Cemetery $cemetery
      * @return void
+     *
+     * @throws \UnexpectedValueException 墓地情報の各値が不正な場合
+     * @throws \ConflictException 墓地情報識別子が重複している場合
      */
-    public function persist(Cemetery $cemetery): void;
+    public function add(Cemetery $cemetery): void;
+
+    /**
+     * 墓地情報を更新する
+     *
+     * @param Cemetery $cemetery
+     * @return void
+     *
+     * @throws \OutOfBoundsException 墓地情報が存在しない場合
+     * @throws \UnexpectedValueException 墓地情報の各値が不正な場合
+     */
+    public function update(Cemetery $cemetery): void;
 
     /**
      * 墓地情報を取得する
