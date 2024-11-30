@@ -7,6 +7,7 @@ use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
 use App\Domains\Cemetery\ValueObjects\CemeteryType;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\User\ValueObjects\Role;
+use App\Http\Encoders\Cemetery\CemeteryEncoder;
 use App\Infrastructures\Authentication\Models\Authentication;
 use App\Infrastructures\Cemetery\Models\Cemetery as Record;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -14,6 +15,7 @@ use Illuminate\Support\Enumerable;
 use Illuminate\Testing\TestResponse;
 use Ramsey\Uuid\Uuid;
 use Tests\Support\DependencyBuildable;
+use Tests\Support\Helpers\Http\WithAuthenticationCallable;
 use Tests\Support\Helpers\Infrastructures\Database\FactoryResolvable;
 use Tests\TestCase;
 
@@ -33,11 +35,17 @@ class CemeteryControllerTest extends TestCase
     use DependencyBuildable;
     use FactoryResolvable;
     use RefreshDatabase;
+    use WithAuthenticationCallable;
 
     /**
      * テストに使用するレコード.
      */
     private Enumerable|null $records;
+
+    /**
+     * テストに使用するエンコーダ.
+     */
+    private CemeteryEncoder $encoder;
 
     /**
      * {@inheritDoc}
@@ -46,6 +54,7 @@ class CemeteryControllerTest extends TestCase
     {
         parent::setUp();
 
+        $this->encoder = $this->builder()->create(CemeteryEncoder::class);
         $this->records = $this->createRecords();
     }
 
@@ -60,26 +69,164 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * @testdox testListReturnsSuccessfulResponseWithEmptyConditions 墓地情報一覧取得APIで条件が空の場合に正常なレスポンスが返却されること.
+     * @testdox testAddReturnsSuccessfulResponse 墓地情報追加APIで正常なリクエストが送信されたとき正常なレスポンスが返却されること.
+     * @dataProvider provideRole
      */
-    public function testListReturnsSuccessfulResponseWithEmptyConditions(): void
+    public function testAddReturnsSuccessfulResponse(Role $role): void
     {
-        $expected = [
-          'cemeteries' =>  $this->records
-            ->map(
-                fn (Record $record): array => [
-                'identifier' => $record->identifier,
-                'customer' => $record->customer,
-                'name' => $record->name,
-                'type' => $record->type,
-                'construction' => $record->construction->format(\DATE_ATOM),
-                'inHouse' => $record->in_house,
-          ]
-            )->toArray()
+        $record = $this->pickRecord();
+
+        $entity = $this->builder()->create(Entity::class, null, [
+            'customer' => $this->builder()->create(
+                CustomerIdentifier::class,
+                null,
+                ['value' => $record->customer]
+            ),
+        ]);
+
+        $payload = [
+            'identifier' => $entity->identifier()->value(),
+            'customer' => $entity->customer()->value(),
+            'name' => $entity->name(),
+            'type' => $entity->type()->name,
+            'construction' => $entity->construction()->toAtomString(),
+            'inHouse' => $entity->inHouse(),
         ];
 
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitListAPI($accessToken)
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
+            $role
+        );
+
+        $response->assertCreated();
+        $this->assertPersisted($payload);
+    }
+
+    /**
+     * @textdox testAddReturnsBadRequestWithMissingCustomer 墓地情報追加APIで存在しない顧客が指定されたときBadRequestが返却されること.
+     * @dataProvider provideRole
+     */
+    public function testAddReturnsBadRequestWithMissingCustomer(Role $role): void
+    {
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => 'name',
+            'type' => CemeteryType::INDIVIDUAL->name,
+            'construction' => '2021-01-01T00:00:00+00:00',
+            'inHouse' => true,
+        ];
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
+            $role
+        );
+
+        $response->assertBadRequest();
+    }
+
+    /**
+     * @testdox testAddReturnsUnauthorized 墓地情報作成APIで未認証のリクエストがされたときUnAuthorizedが返却されること.
+     */
+    public function testAddReturnsUnauthorized(): void
+    {
+        $response = $this->hitAddAPI([]);
+
+        $response->assertUnauthorized();
+    }
+
+    /**
+     * @testdox testUpdateReturnsSuccessfulResponse 墓地情報更新APIで正常なリクエストが実行されたとき正常なレスポンスが返却されること.
+     * @dataProvider provideRole
+     */
+    public function testUpdateReturnsSuccessfulResponse(Role $role): void
+    {
+        $record = $this->pickRecord();
+
+        $entity = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(
+                CemeteryIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
+            'customer' => $this->builder()->create(
+                CustomerIdentifier::class,
+                null,
+                ['value' => $record->customer]
+            ),
+        ]);
+
+        $payload = [
+            'identifier' => $entity->identifier()->value(),
+            'customer' => $entity->customer()->value(),
+            'name' => $entity->name(),
+            'type' => $entity->type()->name,
+            'construction' => $entity->construction()->toAtomString(),
+            'inHouse' => $entity->inHouse(),
+        ];
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($record->identifier, $payload, $accessToken),
+            $role
+        );
+
+        $response->assertNoContent();
+        $this->assertPersisted($payload);
+    }
+
+    /**
+     * @testdox testUpdateReturnsBadRequestWithMissingCustomer 墓地情報更新APIで存在しない顧客が指定されたときBadRequestが返却されること.
+     * @dataProvider provideRole
+     */
+    public function testUpdateReturnsBadRequestWithMissingCustomer(Role $role): void
+    {
+        $record = $this->pickRecord();
+
+        $entity = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(
+                CemeteryIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
+        ]);
+
+        $payload = [
+            'identifier' => $entity->identifier()->value(),
+            'customer' => Uuid::uuid7()->toString(),
+            'name' => $entity->name(),
+            'type' => $entity->type()->name,
+            'construction' => $entity->construction()->toAtomString(),
+            'inHouse' => $entity->inHouse(),
+        ];
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($record->identifier, $payload, $accessToken),
+            $role
+        );
+
+        $response->assertBadRequest();
+    }
+
+    /**
+     * @testdox testUpdateReturnsUnAuthorizedWithoutLogin 墓地情報更新APIで未認証のときUnAuthorizedが返却されること.
+     */
+    public function testUpdateReturnsUnAuthorizedWithoutLogin(): void
+    {
+        $response = $this->hitUpdateAPI(Uuid::uuid7()->toString(), []);
+
+        $response->assertUnauthorized();
+    }
+
+    /**
+     * @testdox testReturnsSuccessfulResponse 墓地情報一覧取得APIで正常なリクエストが送信されたとき正常なレスポンスが返却されること.
+     * @dataProvider provideConditions
+     */
+    public function testListReturnsSuccessfulResponse(array $conditions): void
+    {
+        $expected = $this->createListExpectedResult($this->records, $conditions);
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitListAPI($accessToken, $conditions),
         );
 
         $response->assertSuccessful();
@@ -87,59 +234,17 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * @testdox testListReturnsSuccessfulResponseWithConditions 墓地情報一覧取得APIで条件が指定された場合に正常なレスポンスが返却されること.
+     * 検索条件を提供するプロパイダ.
      */
-    public function testListReturnsSuccessfulResponseWithConditions(): void
+    public static function provideConditions(): \Generator
     {
-        $record = $this->pickRecord();
+        yield 'empty' => [[]];
 
-        $conditions = [
-          'customer' => $record->customer,
-        ];
-
-        $expected = [
-          'cemeteries' =>  $this->records
-            ->filter(fn (Record $record): bool => $record->customer === $conditions['customer'])
-            ->map(
-                fn (Record $record): array => [
-                'identifier' => $record->identifier,
-                'customer' => $record->customer,
-                'name' => $record->name,
-                'type' => $record->type,
-                'construction' => $record->construction->format(\DATE_ATOM),
-                'inHouse' => $record->in_house,
-          ]
-            )
-            ->values()
-            ->all()
-        ];
-
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitListAPI($accessToken, $conditions)
-        );
-
-        $response->assertSuccessful();
-        $response->assertJson($expected, true);
+        yield 'customer' => [['customer' => Uuid::uuid7()->toString()]];
     }
 
     /**
-     * @testdox testListReturnsUnprocessableEntityWithInvalidConditions 墓地情報一覧取得APIで不正な条件が指定された場合にUnprocessableEntityが返却されること.
-     */
-    public function testListReturnsUnprocessableEntityWithInvalidConditions(): void
-    {
-        $invalid = [
-          'customer' => 'invalid',
-        ];
-
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitListAPI($accessToken, $invalid)
-        );
-
-        $response->assertStatus(422);
-    }
-
-    /**
-     * @testdox testListReturnsUnAuthorizedWithOutLogin 墓地情報一覧取得APIで未認証の場合にUnAuthorizedが返却されること.
+     * @testdox testListReturnsUnAuthorizedWithOutLogin 墓地情報一覧取得APIで未認証のときUnAuthorizedが返却されること.
      */
     public function testListReturnsUnAuthorizedWithOutLogin(): void
     {
@@ -149,24 +254,15 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * @testdox testFindReturnsSuccessfulResponse 墓地情報取得APIで正常なリクエストが送信された場合に正常なレスポンスが返却されること.
+     * @testdox testFindReturnsSuccessfulResponse 墓地情報取得APIで正常なリクエストが送信されたとき正常なレスポンスが返却されること.
      */
     public function testFindReturnsSuccessfulResponse(): void
     {
         $record = $this->pickRecord();
 
-        $expected = [
-          'cemetery' => [
-            'identifier' => $record->identifier,
-            'customer' => $record->customer,
-            'name' => $record->name,
-            'type' => $record->type,
-            'construction' => $record->construction->format(\DATE_ATOM),
-            'inHouse' => $record->in_house,
-          ]
-        ];
+        $expected = $this->createFindExpectedResult($record);
 
-        $response = $this->withLogin(
+        $response = $this->callAPIWithAuthentication(
             fn (string $accessToken): TestResponse => $this->hitFindAPI($record->identifier, $accessToken)
         );
 
@@ -174,24 +270,13 @@ class CemeteryControllerTest extends TestCase
         $response->assertJson($expected);
     }
 
-    /**
-     * @testdox testFindReturnsUnprocessableEntityWithInvalidIdentifier 墓地情報取得APIで不正な識別子が指定された場合にUnprocessableEntityが返却されること.
-     */
-    public function testFindReturnsUnprocessableEntityWithInvalidIdentifier(): void
-    {
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitFindAPI('invalid', $accessToken)
-        );
-
-        $response->assertStatus(422);
-    }
 
     /**
-     * @testdox testFindReturnsNotFoundWithNotExistsIdentifier 墓地情報取得APIで存在しない識別子が指定された場合にNotFoundが返却されること.
+     * @testdox testFindReturnsNotFoundWithNotExistsIdentifier 墓地情報取得APIで存在しない識別子が指定されたときNotFoundが返却されること.
      */
     public function testFindReturnsNotFoundWithNotExistsIdentifier(): void
     {
-        $response = $this->withLogin(
+        $response = $this->callAPIWithAuthentication(
             fn (string $accessToken): TestResponse => $this->hitFindAPI(Uuid::uuid7()->toString(), $accessToken)
         );
 
@@ -199,7 +284,7 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * @testdox testFindReturnsUnAuthorizedWithOutLogin 墓地情報取得APIで未認証の場合にUnAuthorizedが返却されること.
+     * @testdox testFindReturnsUnAuthorizedWithOutLogin 墓地情報取得APIで未認証のときUnAuthorizedが返却されること.
      */
     public function testFindReturnsUnAuthorizedWithOutLogin(): void
     {
@@ -209,236 +294,26 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateReturnsSuccessfulResponse 墓地情報作成APIで正常なリクエストが送信された場合に正常なレスポンスが返却されること.
-     */
-    public function testCreateReturnsSuccessfulResponse(): void
-    {
-        $record = $this->pickRecord();
-
-        $entity = $this->builder()->create(Entity::class, null, [
-          'customer' => $this->builder()->create(
-              CustomerIdentifier::class,
-              null,
-              ['value' => $record->customer]
-          ),
-        ]);
-
-        $payload = [
-          'identifier' => $entity->identifier()->value(),
-          'customer' => $entity->customer()->value(),
-          'name' => $entity->name(),
-          'type' => $entity->type()->name,
-          'construction' => $entity->construction()->toAtomString(),
-          'inHouse' => $entity->inHouse(),
-        ];
-
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitCreateAPI($payload, $accessToken)
-        );
-
-        $response->assertSuccessful();
-        $response->assertStatus(201);
-        $this->assertDatabaseHas('cemeteries', [
-          'identifier' => $entity->identifier()->value(),
-          'customer' => $entity->customer()->value(),
-          'name' => $entity->name(),
-          'type' => $entity->type()->name,
-          'construction' => $entity->construction()->toAtomString(),
-          'in_house' => $entity->inHouse(),
-        ]);
-    }
-
-    /**
-     * @testdox testCreateReturnsUnprocessableEntityWithInvalidPayload 墓地情報作成APIで不正なペイロードが指定された場合にUnprocessableEntityが返却されること.
-     */
-    public function testCreateReturnsUnprocessableEntityWithInvalidPayload(): void
-    {
-        $payload = [
-          'identifier' => 'invalid',
-          'customer' => 'invalid',
-          'name' => 'invalid',
-          'type' => 'invalid',
-          'construction' => 'invalid',
-          'inHouse' => 'invalid',
-        ];
-
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitCreateAPI($payload, $accessToken)
-        );
-
-        $response->assertStatus(422);
-    }
-
-    /**
-     * @textdox testCreateReturnsBadRequestWithNonExistenceCustomer 墓地情報作成APIで存在しない顧客が指定された場合にBadRequestが返却されること.
-     */
-    public function testCreateReturnsBadRequestWithNonExistenceCustomer(): void
-    {
-        $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'customer' => Uuid::uuid7()->toString(),
-          'name' => 'name',
-          'type' => CemeteryType::INDIVIDUAL->name,
-          'construction' => '2021-01-01T00:00:00+00:00',
-          'inHouse' => true,
-        ];
-
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitCreateAPI($payload, $accessToken)
-        );
-
-        $response->assertStatus(400);
-    }
-
-    /**
-     * @testdox testCreateReturnsUnAuthorizedWithOutLogin 墓地情報作成APIで未認証の場合にUnAuthorizedが返却されること.
-     */
-    public function testCreateReturnsUnAuthorizedWithOutLogin(): void
-    {
-        $response = $this->hitCreateAPI([]);
-
-        $response->assertUnauthorized();
-    }
-
-    /**
-     * @testdox testUpdateReturnsSuccessfulResponse 墓地情報更新APIで正常なリクエストが送信された場合に正常なレスポンスが返却されること.
-     */
-    public function testUpdateReturnsSuccessfulResponse(): void
-    {
-        $record = $this->pickRecord();
-
-        $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              CemeteryIdentifier::class,
-              null,
-              ['value' => $record->identifier]
-          ),
-          'customer' => $this->builder()->create(
-              CustomerIdentifier::class,
-              null,
-              ['value' => $record->customer]
-          ),
-        ]);
-
-        $payload = [
-          'identifier' => $entity->identifier()->value(),
-          'customer' => $entity->customer()->value(),
-          'name' => $entity->name(),
-          'type' => $entity->type()->name,
-          'construction' => $entity->construction()->toAtomString(),
-          'inHouse' => $entity->inHouse(),
-        ];
-
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitUpdateAPI(
-                $record->identifier,
-                $payload,
-                $accessToken
-            )
-        );
-
-        $response->assertSuccessful();
-        $response->assertStatus(204);
-        $this->assertDatabaseHas('cemeteries', [
-          'identifier' => $entity->identifier()->value(),
-          'customer' => $entity->customer()->value(),
-          'name' => $entity->name(),
-          'type' => $entity->type()->name,
-          'construction' => $entity->construction()->toAtomString(),
-          'in_house' => $entity->inHouse(),
-        ]);
-    }
-
-    /**
-     * @testdox testUpdateReturnsUnprocessableEntityWithInvalidPayload 墓地情報更新APIで不正なペイロードが指定された場合にUnprocessableEntityが返却されること.
-     */
-    public function testUpdateReturnsUnprocessableEntityWithInvalidPayload(): void
-    {
-        $record = $this->pickRecord();
-
-        $payload = [
-          'identifier' => 'invalid',
-          'customer' => 'invalid',
-          'name' => 'invalid',
-          'type' => 'invalid',
-          'construction' => 'invalid',
-          'inHouse' => 'invalid',
-        ];
-
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($record->identifier, $payload, $accessToken)
-        );
-
-        $response->assertStatus(422);
-    }
-
-    /**
-     * @testdox testUpdateReturnsBadRequestWithNonExistenceCustomer 墓地情報更新APIで存在しない顧客が指定された場合にBadRequestが返却されること.
-     */
-    public function testUpdateReturnsBadRequestWithNonExistenceCustomer(): void
-    {
-        $record = $this->pickRecord();
-
-        $payload = [
-          'identifier' => $record->identifier,
-          'customer' => Uuid::uuid7()->toString(),
-          'name' => 'name',
-          'type' => CemeteryType::INDIVIDUAL->name,
-          'construction' => '2021-01-01T00:00:00+00:00',
-          'inHouse' => true,
-        ];
-
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($record->identifier, $payload, $accessToken)
-        );
-
-        $response->assertStatus(400);
-    }
-
-    /**
-     * @testdox testUpdateReturnsUnAuthorizedWithOutLogin 墓地情報更新APIで未認証の場合にUnAuthorizedが返却されること.
-     */
-    public function testUpdateReturnsUnAuthorizedWithOutLogin(): void
-    {
-        $response = $this->hitUpdateAPI(Uuid::uuid7()->toString(), []);
-
-        $response->assertUnauthorized();
-    }
-
-    /**
-     * @testdox testDeleteReturnsSuccessfulResponse 墓地情報削除APIで正常なリクエストが送信された場合に正常なレスポンスが返却されること.
+     * @testdox testDeleteReturnsSuccessfulResponse 墓地情報削除APIで正常なリクエストが送信されたとき正常なレスポンスが返却されること.
      */
     public function testDeleteReturnsSuccessfulResponse(): void
     {
         $record = $this->pickRecord();
 
-        $response = $this->withLogin(
+        $response = $this->callAPIWithAuthentication(
             fn (string $accessToken): TestResponse => $this->hitDeleteAPI($record->identifier, $accessToken)
         );
 
-        $response->assertSuccessful();
-        $response->assertStatus(200);
+        $response->assertNoContent();
         $this->assertDatabaseMissing('cemeteries', ['identifier' => $record->identifier]);
     }
 
     /**
-     * @testdox testDeleteReturnsUnprocessableEntityWithInvalidIdentifier 墓地情報削除APIで不正な識別子が指定された場合にUnprocessableEntityが返却されること.
+     * @testdox testDeleteReturnsNotFoundWithMissingIdentifier 墓地情報削除APIで存在しない識別子が指定されたときNotFoundが返却されること.
      */
-    public function testDeleteReturnsUnprocessableEntityWithInvalidIdentifier(): void
+    public function testDeleteReturnsNotFoundWithMissingIdentifier(): void
     {
-        $response = $this->withLogin(
-            fn (string $accessToken): TestResponse => $this->hitDeleteAPI('invalid', $accessToken)
-        );
-
-        $response->assertStatus(422);
-    }
-
-    /**
-     * @testdox testDeleteReturnsNotFoundWithNotExistsIdentifier 墓地情報削除APIで存在しない識別子が指定された場合にNotFoundが返却されること.
-     */
-    public function testDeleteReturnsNotFoundWithNotExistsIdentifier(): void
-    {
-        $response = $this->withLogin(
+        $response = $this->callAPIWithAuthentication(
             fn (string $accessToken): TestResponse => $this->hitDeleteAPI(Uuid::uuid7()->toString(), $accessToken)
         );
 
@@ -446,13 +321,13 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * @testdox testDeleteReturnsUnAuthorizedWithAdminUser 墓地情報削除APIで一般ユーザーの場合にUnAuthorizedが返却されること.
+     * @testdox testDeleteReturnsUnAuthorizedWithAdminUser 墓地情報削除APIでユーザー権限でリクエストしたときUnAuthorizedが返却されること.
      */
     public function testDeleteReturnsUnAuthorizedWithNormalUser(): void
     {
         $record = $this->pickRecord();
 
-        $response = $this->withLogin(
+        $response = $this->callAPIWithAuthentication(
             fn (string $accessToken): TestResponse => $this->hitDeleteAPI($record->identifier, $accessToken),
             Role::USER
         );
@@ -461,9 +336,9 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * @testdox testDeleteReturnsUnAuthorizedWithOutLogin 墓地情報削除APIで未認証の場合にUnAuthorizedが返却されること.
+     * @testdox testDeleteReturnsUnAuthorizedWithoutLogin 墓地情報削除APIで未認証のときUnAuthorizedが返却されること.
      */
-    public function testDeleteReturnsUnAuthorizedWithOutLogin(): void
+    public function testDeleteReturnsUnAuthorizedWithoutLogin(): void
     {
         $response = $this->hitDeleteAPI(Uuid::uuid7()->toString());
 
@@ -487,27 +362,29 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * 認証情報を付与してAPIを実行する.
+     * 墓地情報追加APIを実行する.
      */
-    private function withLogin(\Closure $callback, Role $role = Role::ADMIN): TestResponse
+    private function hitAddAPI(array $payload, string|null $accessToken = null): TestResponse
     {
-        $record = $this->factory(Authentication::class)
-          ->roleOf($role)
-          ->create()
-          ->with('user')
-          ->first();
-
-        $authentication = $this->json(
+        return $this->json(
             method: 'POST',
-            uri: 'api/auth/login',
-            data: [
-            'identifier' => Uuid::uuid7()->toString(),
-            'email' => $record->user->email,
-            'password' => $record->user->password,
-      ]
+            uri: 'api/cemeteries',
+            data: $payload,
+            headers: !\is_null($accessToken) ? ['Authorization' => "Bearer {$accessToken}"] : []
         );
+    }
 
-        return $callback($authentication['accessToken']['value']);
+    /**
+     * 墓地情報更新APIを実行する.
+     */
+    private function hitUpdateAPI(string $identifier, array $payload, string|null $accessToken = null): TestResponse
+    {
+        return $this->json(
+            method: 'PUT',
+            uri: \sprintf('api/cemeteries/%s', $identifier),
+            data: $payload,
+            headers: !\is_null($accessToken) ? ['Authorization' => "Bearer {$accessToken}"] : []
+        );
     }
 
     /**
@@ -535,32 +412,6 @@ class CemeteryControllerTest extends TestCase
     }
 
     /**
-     * 墓地情報作成APIを実行する.
-     */
-    private function hitCreateAPI(array $payload, string|null $accessToken = null): TestResponse
-    {
-        return $this->json(
-            method: 'POST',
-            uri: 'api/cemeteries',
-            data: $payload,
-            headers: !\is_null($accessToken) ? ['Authorization' => "Bearer {$accessToken}"] : []
-        );
-    }
-
-    /**
-     * 墓地情報更新APIを実行する.
-     */
-    private function hitUpdateAPI(string $identifier, array $payload, string|null $accessToken = null): TestResponse
-    {
-        return $this->json(
-            method: 'PUT',
-            uri: \sprintf('api/cemeteries/%s', $identifier),
-            data: $payload,
-            headers: !\is_null($accessToken) ? ['Authorization' => "Bearer {$accessToken}"] : []
-        );
-    }
-
-    /**
      * 墓地情報削除APIを実行する.
      */
     private function hitDeleteAPI(string $identifier, string|null $accessToken = null): TestResponse
@@ -570,5 +421,50 @@ class CemeteryControllerTest extends TestCase
             uri: \sprintf('api/cemeteries/%s', $identifier),
             headers: !\is_null($accessToken) ? ['Authorization' => "Bearer {$accessToken}"] : []
         );
+    }
+
+    /**
+     * 永続化した内容を検証する.
+     */
+    private function assertPersisted(array $payload): void
+    {
+        $this->assertDatabaseHas('cemeteries', [
+            'identifier' => $payload['identifier'],
+            'customer' => $payload['customer'],
+            'name' => $payload['name'],
+            'type' => $payload['type'],
+            'construction' => $payload['construction'],
+            'in_house' => $payload['inHouse'],
+        ]);
+    }
+
+    /**
+     * 墓地情報一覧取得APIの期待結果を生成する.
+     */
+    private function createListExpectedResult(Enumerable $records, array $conditions): array
+    {
+        return [
+            'cemeteries' => $records
+                ->when(isset($conditions['customer']), fn (Enumerable $records) => $records->filter(
+                    fn (Record $record): bool => $record->customer === $conditions['customer']
+                ))
+                ->map(fn (Record $record): array => $this->createFindExpectedResult($record))
+                ->all()
+        ];
+    }
+
+    /**
+     * 墓地情報取得APIの期待結果を生成する.
+     */
+    private function createFindExpectedResult(Record $record): array
+    {
+        return [
+            'identifier' => $record->identifier,
+            'customer' => $record->customer,
+            'name' => $record->name,
+            'type' => $record->type,
+            'construction' => $record->construction->format(\DATE_ATOM),
+            'inHouse' => $record->in_house,
+        ];
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Infrastructures\Common;
 
+use App\Exceptions\ConflictException;
 use Illuminate\Database\QueryException;
 use PDOException;
 
@@ -24,8 +25,8 @@ abstract class AbstractEloquentRepository
      * デフォルトのエラーメッセージフォーマット.
      */
     protected const DEFAULT_MESSAGE_FORMATS = [
-      self::UNIQUE_CONSTRAINT_CODE => 'Unique constraint violation: %s',
-      self::FOREIGN_KEY_CONSTRAINT_CODE => 'Foreign key constraint violation: %s',
+        self::UNIQUE_CONSTRAINT_CODE => 'Unique constraint violation: %s',
+        self::FOREIGN_KEY_CONSTRAINT_CODE => 'Foreign key constraint violation: %s',
     ];
 
     /**
@@ -35,9 +36,16 @@ abstract class AbstractEloquentRepository
     {
         if ($exception instanceof QueryException) {
             $code = $exception->getCode();
+
+            $class = match ($code) {
+                self::UNIQUE_CONSTRAINT_CODE => ConflictException::class,
+                self::FOREIGN_KEY_CONSTRAINT_CODE => \UnexpectedValueException::class,
+                default => \RuntimeException::class,
+            };
+
             $message = \vsprintf(static::DEFAULT_MESSAGE_FORMATS[$code], $messages);
 
-            throw new \UnexpectedValueException($message);
+            throw new $class($message);
         }
 
         throw $exception;

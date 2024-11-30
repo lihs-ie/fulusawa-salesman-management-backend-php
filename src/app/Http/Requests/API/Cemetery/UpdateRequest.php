@@ -7,9 +7,9 @@ use App\Http\Requests\API\AbstractRequest;
 use App\Validation\Rules;
 
 /**
- * 墓地情報永続化リクエスト.
+ * 墓地情報更新リクエスト.
  */
-class PersistRequest extends AbstractRequest
+class UpdateRequest extends AbstractRequest
 {
     use LazyThrowable;
 
@@ -26,5 +26,13 @@ class PersistRequest extends AbstractRequest
           'construction' => ['required', 'string', 'date'],
           'inHouse' => ['required', 'boolean'],
         ];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function routeParameterNames(): array
+    {
+        return ['identifier'];
     }
 }

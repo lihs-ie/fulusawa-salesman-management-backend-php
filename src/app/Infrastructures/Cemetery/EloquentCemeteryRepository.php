@@ -33,13 +33,11 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
     /**
      * {@inheritDoc}
      */
-    public function persist(Entity $cemetery): void
+    public function add(Entity $cemetery): void
     {
         try {
             $this->createQuery()
-                ->updateOrCreate([
-                    'identifier' => $cemetery->identifier()->value(),
-                ], [
+                ->create([
                     'identifier' => $cemetery->identifier()->value(),
                     'customer' => $cemetery->customer()->value(),
                     'name' => $cemetery->name(),
@@ -58,29 +56,47 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
     /**
      * {@inheritDoc}
      */
-    public function find(CemeteryIdentifier $identifier): Entity
+    public function update(Entity $cemetery): void
     {
-        $record = $this->createQuery()
-            ->where('identifier', $identifier->value())
+        $target = $this->createQuery()
+            ->ofIdentifier($cemetery->identifier())
             ->first();
 
-        if (\is_null($record)) {
-            throw new \OutOfBoundsException('Cemetery not found');
+        if (\is_null($target)) {
+            throw new \OutOfBoundsException(\sprintf('Cemetery not found. identifier: %s', $cemetery->identifier()->value()));
         }
 
-        return $this->restoreEntity($record);
+        try {
+            $target->customer = $cemetery->customer()->value();
+            $target->name = $cemetery->name();
+            $target->type = $cemetery->type()->name;
+            $target->construction = $cemetery->construction()->toAtomString();
+            $target->in_house = $cemetery->inHouse();
+            $target->updated_at = CarbonImmutable::now();
+
+            $target->save();
+        } catch (PDOException $exception) {
+            $this->handlePDOException(
+                exception: $exception,
+                messages: $cemetery->identifier()->value()
+            );
+        }
     }
 
     /**
      * {@inheritDoc}
      */
-    public function ofCustomer(CustomerIdentifier $customer): Enumerable
+    public function find(CemeteryIdentifier $identifier): Entity
     {
-        $records = $this->createQuery()
-            ->where('customer', $customer->value())
-            ->get();
+        $target = $this->createQuery()
+            ->ofIdentifier($identifier)
+            ->first();
 
-        return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
+        if (\is_null($target)) {
+            throw new \OutOfBoundsException(\sprintf('Cemetery not found. identifier: %s', $identifier->value()));
+        }
+
+        return $this->restoreEntity($target);
     }
 
     /**
@@ -100,10 +116,12 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
      */
     public function delete(CemeteryIdentifier $identifier): void
     {
-        $target = Record::where('identifier', $identifier->value())->first();
+        $target = $this->createQuery()
+            ->ofIdentifier($identifier)
+            ->first();
 
         if (\is_null($target)) {
-            throw new \OutOfBoundsException('Cemetery not found');
+            throw new \OutOfBoundsException(\sprintf('Cemetery not found. identifier: %s', $identifier->value()));
         }
 
         $target->delete();

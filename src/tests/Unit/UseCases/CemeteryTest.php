@@ -46,9 +46,9 @@ class CemeteryTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnCreate persistメソッドで新規の墓地情報を永続化すること.
+     * @testdox testAddSuccessInCaseOnCreate persistメソッドで新規の墓地情報を永続化すること.
      */
-    public function testPersistSuccessInCaseOnCreate(): void
+    public function testAddSuccessInCaseOnCreate(): void
     {
         $parameters = [
             'identifier' => Uuid::uuid7()->toString(),
@@ -61,7 +61,7 @@ class CemeteryTest extends TestCase
 
         [$useCase, $persisted] = $this->createEmptyPersistedUseCase();
 
-        $useCase->persist(
+        $useCase->add(
             identifier: $parameters['identifier'],
             customer: $parameters['customer'],
             name: $parameters['name'],
@@ -76,9 +76,9 @@ class CemeteryTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessOnUpdate persistメソッドで既存の墓地情報を上書きして永続化すること.
+     * @testdox testUpdateSuccess updateメソッドで既存の墓地情報を上書きして永続化すること.
      */
-    public function testPersistSuccessOnUpdate(): void
+    public function testUpdateSuccess(): void
     {
         [$useCase, $persisted] = $this->createPersistUseCase();
 
@@ -95,7 +95,7 @@ class CemeteryTest extends TestCase
 
         $expected = $this->createEntityFromParameters($parameters);
 
-        $useCase->persist(
+        $useCase->update(
             identifier: $parameters['identifier'],
             customer: $parameters['customer'],
             name: $parameters['name'],
@@ -105,6 +105,25 @@ class CemeteryTest extends TestCase
         );
 
         $this->assertPersisted($expected, $persisted);
+    }
+
+    /**
+     * @testdox testUpdateFailureWithMissingEntity updateメソッドで存在しない墓地情報を指定したとき例外が発生すること.
+     */
+    public function testUpdateFailureWithMissingEntity(): void
+    {
+        [$useCase] = $this->createPersistUseCase();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $useCase->update(
+            identifier: Uuid::uuid7()->toString(),
+            customer: Uuid::uuid7()->toString(),
+            name: Str::random(\mt_rand(1, 255)),
+            type: Collection::make(CemeteryType::cases())->random()->name,
+            construction: CarbonImmutable::now()->format('Y-m-d H:i:s'),
+            inHouse: (bool) \mt_rand(0, 1)
+        );
     }
 
     /**

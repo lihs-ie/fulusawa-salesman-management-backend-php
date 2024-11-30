@@ -3,7 +3,7 @@
 namespace Tests\Unit\Http\Requests\API\Cemetery;
 
 use App\Domains\Cemetery\ValueObjects\CemeteryType;
-use App\Http\Requests\API\Cemetery\PersistRequest;
+use App\Http\Requests\API\Cemetery\UpdateRequest;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Ramsey\Uuid\Uuid;
@@ -19,7 +19,7 @@ use Tests\Unit\Http\Requests\API\CommandRequestTest;
  *
  * @coversNothing
  */
-class PersistRequestTest extends TestCase
+class UpdateRequestTest extends TestCase
 {
     use CommandRequestTest;
 
@@ -28,7 +28,7 @@ class PersistRequestTest extends TestCase
      */
     protected function target(): string
     {
-        return PersistRequest::class;
+        return UpdateRequest::class;
     }
 
     /**
@@ -37,7 +37,6 @@ class PersistRequestTest extends TestCase
     protected function createDefaultPayload(): array
     {
         return [
-          'identifier' => Uuid::uuid7()->toString(),
           'customer' => Uuid::uuid7()->toString(),
           'name' => Str::random(\mt_rand(1, 255)),
           'type' => Collection::make(CemeteryType::cases())->random()->name,
@@ -51,7 +50,9 @@ class PersistRequestTest extends TestCase
      */
     protected function createDefaultRoute(): array
     {
-        return [];
+        return [
+          'identifier' => Uuid::uuid7()->toString(),
+        ];
     }
 
     /**
@@ -70,12 +71,6 @@ class PersistRequestTest extends TestCase
     protected function getInvalidPayloadPatterns(): array
     {
         return [
-          'identifier' => [
-            'invalid type' => \mt_rand(1, 255),
-            'empty' => '',
-            'invalid format' => 'invalid',
-            'null' => null
-          ],
           'customer' => [
             'invalid type' => \mt_rand(1, 255),
             'empty' => '',
@@ -122,6 +117,13 @@ class PersistRequestTest extends TestCase
      */
     protected function getInvalidRoutePatterns(): array
     {
-        return [];
+        return [
+          'identifier' => [
+            'invalid type' => \mt_rand(1, 255),
+            'empty' => '',
+            'invalid format' => 'invalid',
+            'null' => null
+          ],
+        ];
     }
 }
