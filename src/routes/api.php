@@ -62,7 +62,7 @@ Route::prefix('customers')
         $sanctum(Role::ADMIN, Role::USER)
             ->group(function () {
                 Route::get('', 'list');
-                Route::post('', 'create');
+                Route::post('', 'add');
 
                 Route::prefix('{identifier}')
                     ->group(function () {

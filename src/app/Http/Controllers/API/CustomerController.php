@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\API;
 
 use App\Domains\Customer\Entities\Customer;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Encoders\Customer\CustomerEncoder;
+use App\Http\Requests\API\Customer\AddRequest;
 use App\Http\Requests\API\Customer\DeleteRequest;
 use App\Http\Requests\API\Customer\FindRequest;
-use App\Http\Requests\API\Customer\PersistRequest;
+use App\Http\Requests\API\Customer\ListRequest;
+use App\Http\Requests\API\Customer\UpdateRequest;
 use App\UseCases\Customer as UseCase;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -19,18 +23,18 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 class CustomerController extends Controller
 {
     /**
-     * 顧客作成.
+     * 顧客追加.
      *
-     * @param PersistRequest $request
+     * @param AddRequest $request
      * @param UseCase $useCase
      * @return Response
      */
-    public function create(PersistRequest $request, UseCase $useCase)
+    public function add(AddRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->add(
                 identifier: $parameters['identifier'],
                 name: $parameters['name'],
                 address: $parameters['address'],
@@ -42,22 +46,24 @@ class CustomerController extends Controller
             return new Response('', Response::HTTP_CREATED);
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestException($exception->getMessage());
+        } catch (ConflictException $exception) {
+            throw new ConflictHttpException($exception->getMessage());
         }
     }
 
     /**
      * 顧客更新.
      *
-     * @param PersistRequest $request
+     * @param UpdateRequest $request
      * @param UseCase $useCase
      * @return Response
      */
-    public function update(PersistRequest $request, UseCase $useCase)
+    public function update(UpdateRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->update(
                 identifier: $parameters['identifier'],
                 name: $parameters['name'],
                 address: $parameters['address'],
@@ -84,7 +90,7 @@ class CustomerController extends Controller
         try {
             $customer = $useCase->find($parameters['identifier']);
 
-            return ['customer' => $encoder->encode($customer)];
+            return  $encoder->encode($customer);
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestException($exception->getMessage());
         } catch (\OutOfBoundsException $exception) {
@@ -95,16 +101,21 @@ class CustomerController extends Controller
     /**
      * 顧客一覧取得.
      */
-    public function list(UseCase $useCase, CustomerEncoder $encoder)
+    public function list(ListRequest $request, UseCase $useCase, CustomerEncoder $encoder)
     {
-        $customers = $useCase->list();
+        $request->validated();
 
-        return [
-          'customers' => $customers->map(
-              fn (Customer $customer): array => $encoder->encode($customer)
-          )
-            ->all()
-        ];
+        try {
+            $customers = $useCase->list($request->all());
+
+            return [
+                'customers' => $customers
+                    ->map(fn (Customer $customer): array => $encoder->encode($customer))
+                    ->all()
+            ];
+        } catch (\InvalidArgumentException $exception) {
+            throw new BadRequestException($exception->getMessage());
+        }
     }
 
     /**

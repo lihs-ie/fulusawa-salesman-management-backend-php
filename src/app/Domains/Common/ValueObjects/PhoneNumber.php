@@ -47,11 +47,25 @@ class PhoneNumber
         return $this->subscriberNumber;
     }
 
-    public function equals(PhoneNumber $other): bool
+    public function equals(?PhoneNumber $other): bool
     {
-        return $this->areaCode === $other->areaCode
-            && $this->localCode === $other->localCode
-            && $this->subscriberNumber === $other->subscriberNumber;
+        if (\is_null($other)) {
+            return false;
+        }
+
+        if ($this->areaCode !== $other->areaCode) {
+            return false;
+        }
+
+        if ($this->localCode !== $other->localCode) {
+            return false;
+        }
+
+        if ($this->subscriberNumber !== $other->subscriberNumber) {
+            return false;
+        }
+
+        return true;
     }
 
     public function __toString(): string

@@ -5,6 +5,7 @@ namespace App\UseCases;
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
 use App\Domains\Customer\CustomerRepository;
 use App\Domains\Customer\Entities\Customer as Entity;
+use App\Domains\Customer\ValueObjects\Criteria;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\TransactionHistory\ValueObjects\TransactionHistoryIdentifier;
 use App\UseCases\Factories\CommonDomainFactory;
@@ -18,13 +19,16 @@ class Customer
 {
     use CommonDomainFactory;
 
+    /**
+     * コンストラクタ.
+     */
     public function __construct(
         private readonly CustomerRepository $repository,
     ) {
     }
 
     /**
-     * 顧客を永続化する
+     * 顧客を追加する.
      *
      * @param string $identifier
      * @param array $name
@@ -34,7 +38,7 @@ class Customer
      * @param array $transactionHistories
      * @return void
      */
-    public function persist(
+    public function add(
         string $identifier,
         array $name,
         array $address,
@@ -52,7 +56,39 @@ class Customer
             transactionHistories: $this->extractTransactionHistories($transactionHistories),
         );
 
-        $this->repository->persist($entity);
+        $this->repository->add($entity);
+    }
+
+    /**
+     * 顧客を更新する.
+     *
+     * @param string $identifier
+     * @param array $name
+     * @param array $address
+     * @param array $phone
+     * @param array $cemeteries
+     * @param array $transactionHistories
+     * @return void
+     */
+    public function update(
+        string $identifier,
+        array $name,
+        array $address,
+        array $phone,
+        array $cemeteries,
+        array $transactionHistories,
+    ): void {
+        $entity = new Entity(
+            identifier: new CustomerIdentifier($identifier),
+            lastName: $this->extractString($name, 'last'),
+            firstName: $this->extractString($name, 'first'),
+            address: $this->extractAddress($address),
+            phone: $this->extractPhone($phone),
+            cemeteries: $this->extractCemeteries($cemeteries),
+            transactionHistories: $this->extractTransactionHistories($transactionHistories),
+        );
+
+        $this->repository->update($entity);
     }
 
     /**
@@ -69,11 +105,12 @@ class Customer
     /**
      * 顧客一覧を取得する
      *
+     * @param array $conditions
      * @return Enumerable
      */
-    public function list(): Enumerable
+    public function list(array $conditions): Enumerable
     {
-        return $this->repository->list();
+        return $this->repository->list($this->createCriteria($conditions));
     }
 
     /**
@@ -111,5 +148,20 @@ class Customer
             ->map(fn (string $transaction): TransactionHistoryIdentifier => new TransactionHistoryIdentifier(
                 value: $transaction
             ));
+    }
+
+    /**
+     * 配列から検索条件を生成する
+     */
+    private function createCriteria(array $conditions): Criteria
+    {
+        $postalCode =  $this->extractArray($conditions, 'postalCode');
+        $phone = $this->extractArray($conditions, 'phone');
+
+        return new Criteria(
+            name: $this->extractString($conditions, 'name'),
+            postalCode: $postalCode ? $this->extractPostalCode($postalCode) : null,
+            phone: $phone ? $this->extractPhone($phone) : null,
+        );
     }
 }

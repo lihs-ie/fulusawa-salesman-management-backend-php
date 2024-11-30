@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Http\Requests\API\Customer;
 
-use App\Http\Requests\API\Customer\PersistRequest;
+use App\Http\Requests\API\Customer\AddRequest;
 use Illuminate\Support\Collection;
 use Ramsey\Uuid\Uuid;
 use Illuminate\Support\Str;
@@ -18,7 +18,7 @@ use Tests\Unit\Http\Requests\API\Support\CommonDomainPayloadGeneratable;
  *
  * @coversNothing
  */
-class PersistRequestTest extends TestCase
+class AddRequestTest extends TestCase
 {
     use CommandRequestTest;
     use CommonDomainPayloadGeneratable;
@@ -28,7 +28,7 @@ class PersistRequestTest extends TestCase
      */
     protected function target(): string
     {
-        return PersistRequest::class;
+        return AddRequest::class;
     }
 
     /**

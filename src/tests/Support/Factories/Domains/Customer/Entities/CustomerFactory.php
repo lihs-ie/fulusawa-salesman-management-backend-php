@@ -22,7 +22,7 @@ class CustomerFactory extends DependencyFactory
     public function create(DependencyBuilder $builder, int $seed, array $overrides): Customer
     {
         return new Customer(
-            identifier: $builder->create(CustomerIdentifier::class, $seed, $overrides),
+            identifier: $overrides['identifier'] ?? $builder->create(CustomerIdentifier::class, $seed, $overrides),
             lastName: $overrides['lastName'] ?? Str::random(\mt_rand(\abs($seed % 10 + 1), 20)),
             firstName: $overrides['firstName'] ?? Str::random(\mt_rand(\abs($seed % 10 + 1), 20)),
             address: $overrides['address'] ?? $builder->create(Address::class, $seed, $overrides),

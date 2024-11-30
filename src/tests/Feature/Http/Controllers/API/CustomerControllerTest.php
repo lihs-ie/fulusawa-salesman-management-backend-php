@@ -3,9 +3,11 @@
 namespace Tests\Feature\Http\Controllers\API;
 
 use App\Domains\Customer\Entities\Customer as Entity;
+use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\User\ValueObjects\Role;
 use App\Http\Encoders\Customer\CustomerEncoder;
 use App\Infrastructures\Customer\Models\Customer as Record;
+use Closure;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Enumerable;
 use Illuminate\Testing\TestResponse;
@@ -23,6 +25,8 @@ use Tests\TestCase;
  * @group customer
  *
  * @coversNothing
+ *
+ * @SuppressWarnings(PHPMD.TooManyMethods)
  */
 class CustomerControllerTest extends TestCase
 {
@@ -63,33 +67,60 @@ class CustomerControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateSuccessReturnsSuccessfulResponse 顧客作成APIを正常なリクエストで実行したとき正常なレスポンスが返却されること.
+     * @testdox testAddSuccessReturnsSuccessfulResponse 顧客追加APIを正常なリクエストで実行したとき正常なレスポンスが返却されること.
      */
-    public function testCreateSuccessReturnsSuccessfulResponse(): void
+    public function testAddSuccessReturnsSuccessfulResponse(): void
     {
         $entity = $this->builder()->create(Entity::class);
 
         $payload = $this->encoder->encode($entity);
 
         $actual = $this->callAPIWithAuthentication(
-            fn (string $accessToken): TestResponse => $this->hitCreateAPI(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI(
                 accessToken: $accessToken,
                 payload: $payload
             )
         );
 
-        $actual->assertSuccessful();
-        $actual->assertStatus(201);
-
+        $actual->assertCreated();
         $this->assertPersisted($payload);
     }
 
     /**
-     * @testdox testCreateReturnsUnauthorizedWithoutAccessToken 顧客作成APIを未認証で実行したときUnauthorizedが返却されること.
+     * @testdox testAddReturnsConflictWithDuplicateIdentifier 顧客追加APIを重複する識別子で実行したときConflictが返却されること.
      */
-    public function testCreateReturnsUnauthorizedWithoutAccessToken(): void
+    public function testAddReturnsConflictWithDuplicateIdentifier(): void
     {
-        $actual = $this->hitCreateAPI(
+        $record = $this->records->random();
+
+        $entity = $this->builder()->create(
+            Entity::class,
+            null,
+            ['identifier' => $this->builder()->create(
+                CustomerIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            )]
+        );
+
+        $payload = $this->encoder->encode($entity);
+
+        $actual = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI(
+                accessToken: $accessToken,
+                payload: $payload
+            )
+        );
+
+        $actual->assertConflict();
+    }
+
+    /**
+     * @testdox testAddReturnsUnauthorizedWithoutAccessToken 顧客追加APIを未認証で実行したときUnauthorizedが返却されること.
+     */
+    public function testAddReturnsUnauthorizedWithoutAccessToken(): void
+    {
+        $actual = $this->hitAddAPI(
             $this->encoder->encode($this->builder()->create(Entity::class))
         );
 
@@ -106,7 +137,11 @@ class CustomerControllerTest extends TestCase
         $entity = $this->builder()->create(
             Entity::class,
             null,
-            ['identifier' => $record->identifier]
+            ['identifier' => $this->builder()->create(
+                CustomerIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            )]
         );
 
         $payload = $this->encoder->encode($entity);
@@ -135,7 +170,22 @@ class CustomerControllerTest extends TestCase
         $actual->assertUnauthorized();
     }
 
-    // TODO: create, updateをpersistメソッドを使い分け後実装する
+    /**
+     * @testdox testUpdateReturnsNotFoundWithMissingIdentifier 顧客更新APIを存在しない識別子で実行したときNotFoundが返却されること.
+     */
+    public function testUpdateReturnsNotFoundWithMissingIdentifier(): void
+    {
+        $entity = $this->builder()->create(Entity::class);
+
+        $actual = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI(
+                accessToken: $accessToken,
+                payload: $this->encoder->encode($entity)
+            )
+        );
+
+        $actual->assertNotFound();
+    }
 
     /**
      * @testdox testFindSuccessReturnsSuccessfulResponse 顧客取得APIを正常なリクエストで実行したとき正常なレスポンスが返却されること.
@@ -151,7 +201,7 @@ class CustomerControllerTest extends TestCase
             )
         );
 
-        $expected = ['customer' => $this->createExpectedFromRecord($target)];
+        $expected = $this->createExpectedFromRecord($target);
 
         $actual->assertSuccessful();
         $actual->assertJson($expected);
@@ -184,21 +234,45 @@ class CustomerControllerTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsSuccessfulResponse 顧客一覧取得APIを正常なリクエストで実行したとき正常なレスポンスが返却されること.
+     * @dataProvider provideConditions
      */
-    public function testListSuccessReturnsSuccessfulResponse(): void
+    public function testListSuccessReturnsSuccessfulResponse(Closure $closure): void
     {
-        $expected = [
-          'customers' => $this->records->map(
-              fn (Record $record): array => $this->createExpectedFromRecord($record)
-          )->all()
-        ];
+        $record = $this->records->random();
+
+        $conditions = $closure($record);
+
+        $expected = $this->createExpectedListFromRecords($conditions);
 
         $actual = $this->callAPIWithAuthentication(
-            fn (string $accessToken): TestResponse => $this->hitListAPI(accessToken: $accessToken)
+            fn (string $accessToken): TestResponse => $this->hitListAPI(accessToken: $accessToken, conditions: $conditions)
         );
 
         $actual->assertSuccessful();
         $actual->assertJson($expected);
+    }
+
+    /**
+     * 検索条件を提供するプロバイダ.
+     */
+    public static function provideConditions(): \Generator
+    {
+        yield 'empty' => [fn (): array => []];
+
+        yield 'first name' => [fn (Record $record): array => ['name' => $record->first_name]];
+
+        yield 'last name' => [fn (Record $record): array => ['name' => $record->last_name]];
+
+        yield 'phone' => [fn (Record $record): array => ['phone' => [
+            'areaCode' => $record->phone_area_code,
+            'localCode' => $record->phone_local_code,
+            'subscriberNumber' => $record->phone_subscriber_number,
+        ]]];
+
+        yield 'postal code' => [fn (Record $record): array => ['postalCode' => [
+            'first' => $record->postal_code_first,
+            'second' => $record->postal_code_second,
+        ]]];
     }
 
     /**
@@ -276,13 +350,13 @@ class CustomerControllerTest extends TestCase
     private function createRecords(): Enumerable
     {
         return $this->factory(Record::class)
-          ->createMany(\mt_rand(5, 10));
+            ->createMany(\mt_rand(5, 10));
     }
 
     /**
-     * 顧客作成APIを実行する.
+     * 顧客追加APIを実行する.
      */
-    private function hitCreateAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitAddAPI(array $payload, string|null $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'POST',
@@ -320,11 +394,11 @@ class CustomerControllerTest extends TestCase
     /**
      * 顧客一覧取得APIを実行する.
      */
-    private function hitListAPI(string|null $accessToken = null): TestResponse
+    private function hitListAPI(array $conditions = [], string|null $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
-            uri: '/api/customers',
+            uri: \sprintf('/api/customers?%s', \http_build_query($conditions)),
             headers: \is_null($accessToken) ? [] : ['Authorization' => "Bearer {$accessToken}"]
         );
     }
@@ -347,20 +421,20 @@ class CustomerControllerTest extends TestCase
     private function assertPersisted(array $expected): void
     {
         $this->assertDatabaseHas('customers', [
-          'identifier' => $expected['identifier'],
-          'last_name' => $expected['name']['last'],
-          'first_name' => $expected['name']['first'],
-          'phone_area_code' => $expected['phone']['areaCode'],
-          'phone_local_code' => $expected['phone']['localCode'],
-          'phone_subscriber_number' => $expected['phone']['subscriberNumber'],
-          'postal_code_first' => $expected['address']['postalCode']['first'],
-          'postal_code_second' => $expected['address']['postalCode']['second'],
-          'prefecture' => $expected['address']['prefecture'],
-          'city' => $expected['address']['city'],
-          'street' => $expected['address']['street'],
-          'building' => $expected['address']['building'],
-          'cemeteries' => \json_encode($expected['cemeteries']),
-          'transaction_histories' => \json_encode($expected['transactionHistories']),
+            'identifier' => $expected['identifier'],
+            'last_name' => $expected['name']['last'],
+            'first_name' => $expected['name']['first'],
+            'phone_area_code' => $expected['phone']['areaCode'],
+            'phone_local_code' => $expected['phone']['localCode'],
+            'phone_subscriber_number' => $expected['phone']['subscriberNumber'],
+            'postal_code_first' => $expected['address']['postalCode']['first'],
+            'postal_code_second' => $expected['address']['postalCode']['second'],
+            'prefecture' => $expected['address']['prefecture'],
+            'city' => $expected['address']['city'],
+            'street' => $expected['address']['street'],
+            'building' => $expected['address']['building'],
+            'cemeteries' => \json_encode($expected['cemeteries']),
+            'transaction_histories' => \json_encode($expected['transactionHistories']),
         ]);
     }
 
@@ -370,28 +444,62 @@ class CustomerControllerTest extends TestCase
     private function createExpectedFromRecord(Record $record): array
     {
         return [
-          'identifier' => $record->identifier,
-          'name' => [
-            'last' => $record->last_name,
-            'first' => $record->first_name,
-          ],
-          'phone' => [
-            'areaCode' => $record->phone_area_code,
-            'localCode' => $record->phone_local_code,
-            'subscriberNumber' => $record->phone_subscriber_number,
-          ],
-          'address' => [
-            'postalCode' => [
-              'first' => $record->postal_code_first,
-              'second' => $record->postal_code_second,
+            'identifier' => $record->identifier,
+            'name' => [
+                'last' => $record->last_name,
+                'first' => $record->first_name,
             ],
-            'prefecture' => $record->prefecture,
-            'city' => $record->city,
-            'street' => $record->street,
-            'building' => $record->building,
-          ],
-          'cemeteries' => \json_decode($record->cemeteries, true),
-          'transactionHistories' => \json_decode($record->transaction_histories, true),
+            'phone' => [
+                'areaCode' => $record->phone_area_code,
+                'localCode' => $record->phone_local_code,
+                'subscriberNumber' => $record->phone_subscriber_number,
+            ],
+            'address' => [
+                'postalCode' => [
+                    'first' => $record->postal_code_first,
+                    'second' => $record->postal_code_second,
+                ],
+                'prefecture' => $record->prefecture,
+                'city' => $record->city,
+                'street' => $record->street,
+                'building' => $record->building,
+            ],
+            'cemeteries' => \json_decode($record->cemeteries, true),
+            'transactionHistories' => \json_decode($record->transaction_histories, true),
+        ];
+    }
+
+    /**
+     * 一覧取得APIの期待値を生成する.
+     */
+    private function createExpectedListFromRecords(array $conditions): array
+    {
+        return [
+            'customers' => $this->records
+                ->when(
+                    isset($conditions['name']),
+                    function (Enumerable $records) use ($conditions): Enumerable {
+                        $name = $conditions['name'];
+
+                        return $records->filter(fn (Record $record): bool => \str_contains($record->first_name, $name) || \str_contains($record->last_name, $name));
+                    }
+                )
+                ->when(
+                    isset($conditions['phone']),
+                    fn (Enumerable $records): Enumerable => $records
+                        ->where('phone_area_code', $conditions['phone']['areaCode'])
+                        ->where('phone_local_code', $conditions['phone']['localCode'])
+                        ->where('phone_subscriber_number', $conditions['phone']['subscriberNumber'])
+                )
+                ->when(
+                    isset($conditions['postalCode']),
+                    fn (Enumerable $records) => $records
+                        ->where('postal_code_first', $conditions['postalCode']['first'])
+                        ->where('postal_code_second', $conditions['postalCode']['second'])
+                )
+                ->map(fn (Record $record): array => $this->createExpectedFromRecord($record))
+                ->values()
+                ->all()
         ];
     }
 }
