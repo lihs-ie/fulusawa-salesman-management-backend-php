@@ -4,7 +4,9 @@ namespace Tests\Support\Factories\Domains\Customer;
 
 use App\Domains\Customer\CustomerRepository;
 use App\Domains\Customer\Entities\Customer;
+use App\Domains\Customer\ValueObjects\Criteria;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
+use App\Exceptions\ConflictException;
 use Closure;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuilder;
@@ -17,6 +19,8 @@ class CustomerRepositoryFactory extends DependencyFactory
 {
     /**
      * {@inheritdoc}
+     *
+     * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
      */
     public function create(DependencyBuilder $builder, int $seed, array $overrides): CustomerRepository
     {
@@ -41,9 +45,31 @@ class CustomerRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function persist(Customer $customer): void
+            public function add(Customer $customer): void
             {
                 $key = $customer->identifier()->value();
+
+                if ($this->instances->has($key)) {
+                    throw new ConflictException('Customer already exists.');
+                }
+
+                $this->instances = clone $this->instances->put($key, $customer);
+
+                if ($callback = $this->onPersist) {
+                    $callback($customer);
+                }
+            }
+
+            /**
+             * {@inheritdoc}
+             */
+            public function update(Customer $customer): void
+            {
+                $key = $customer->identifier()->value();
+
+                if (!$this->instances->has($key)) {
+                    throw new \OutOfBoundsException('Customer not found.');
+                }
 
                 $this->instances = clone $this->instances->put($key, $customer);
 
@@ -71,9 +97,34 @@ class CustomerRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function list(): Enumerable
+            public function list(Criteria $criteria): Enumerable
             {
-                return clone $this->instances;
+                return $this->instances
+                    ->when(
+                        !\is_null($criteria->name()),
+                        fn (Enumerable $instances): Enumerable => $instances->filter(
+                            fn (Customer $instance): bool =>
+                            str_contains(
+                                $instance->lastName(),
+                                $criteria->name()
+                            ) ||  str_contains(
+                                $instance->firstName(),
+                                $criteria->name()
+                            )
+                        )
+                    )
+                    ->when(
+                        !\is_null($criteria->postalCode()),
+                        fn (Enumerable $instances): Enumerable => $instances->filter(
+                            fn (Customer $instance): bool => $criteria->postalCode()->equals($instance->address()->postalCode())
+                        )
+                    )
+                    ->when(
+                        !\is_null($criteria->phone()),
+                        fn (Enumerable $instances): Enumerable => $instances->filter(
+                            fn (Customer $instance): bool => $criteria->phone()->equals($instance->phone())
+                        )
+                    );
             }
 
             /**
@@ -81,6 +132,10 @@ class CustomerRepositoryFactory extends DependencyFactory
              */
             public function delete(CustomerIdentifier $identifier): void
             {
+                if (!$this->instances->has($identifier->value())) {
+                    throw new \OutOfBoundsException('Customer not found.');
+                }
+
                 $removed = $this->instances->reject(
                     fn (Customer $instance): bool => $instance->identifier()->equals($identifier)
                 );

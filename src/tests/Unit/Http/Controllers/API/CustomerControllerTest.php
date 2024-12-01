@@ -3,20 +3,27 @@
 namespace Tests\Unit\Http\Controllers\API;
 
 use App\Domains\Customer\Entities\Customer;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\API\CustomerController;
 use App\Http\Encoders\Customer\CustomerEncoder;
+use App\Http\Requests\API\Customer\AddRequest;
 use App\Http\Requests\API\Customer\DeleteRequest;
 use App\Http\Requests\API\Customer\FindRequest;
-use App\Http\Requests\API\Customer\PersistRequest;
+use App\Http\Requests\API\Customer\ListRequest;
+use App\Http\Requests\API\Customer\UpdateRequest;
 use App\UseCases\Customer as UseCase;
+use Closure;
 use Illuminate\Http\Response;
 use Illuminate\Support\Enumerable;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Exception\BadRequestException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\Support\DependencyBuildable;
 use Tests\Support\Helpers\Http\RequestGeneratable;
 use Tests\Support\Helpers\Infrastructures\Database\FactoryResolvable;
 use Tests\TestCase;
+use Tests\Unit\Http\Requests\API\Support\CommonDomainPayloadGeneratable;
 
 /**
  * @group feature
@@ -28,6 +35,7 @@ use Tests\TestCase;
  */
 class CustomerControllerTest extends TestCase
 {
+    use CommonDomainPayloadGeneratable;
     use DependencyBuildable;
     use FactoryResolvable;
     use RequestGeneratable;
@@ -74,34 +82,34 @@ class CustomerControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateReturnsSuccessfulResponse createメソッドで正常な値が与えられたときに正常なレスポンスが返却されること.
+     * @testdox testAddReturnsSuccessfulResponse createメソッドで正常な値が与えられたときに正常なレスポンスが返却されること.
      */
-    public function testCreateReturnsSuccessfulResponse(): void
+    public function testAddReturnsSuccessfulResponse(): void
     {
         $customer = $this->builder()->create(Customer::class);
         $payload = $this->createPersistPayload($customer);
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['name'],
-              $payload['address'],
-              $payload['phone'],
-              $payload['cemeteries'],
-              $payload['transactionHistories']
-          );
+            ->expects($this->once())
+            ->method('add')
+            ->with(
+                $payload['identifier'],
+                $payload['name'],
+                $payload['address'],
+                $payload['phone'],
+                $payload['cemeteries'],
+                $payload['transactionHistories']
+            );
 
         $controller = new CustomerController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
+            class: AddRequest::class,
             payload: $payload
         );
 
-        $actual = $controller->create(
+        $actual = $controller->add(
             request: $request,
             useCase: $useCase
         );
@@ -111,37 +119,74 @@ class CustomerControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateThrowsBadRequestWhenInvalidArgumentWasThrown createメソッドで不正な引数が与えられたときにBadRequestExceptionがスローされること.
+     * @testdox testAddThrowsBadRequestWhenInvalidArgumentWasThrown createメソッドで不正な引数が与えられたときにBadRequestExceptionがスローされること.
      */
-    public function testCreateThrowsBadRequestWhenInvalidArgumentWasThrown(): void
+    public function testAddThrowsBadRequestWhenInvalidArgumentWasThrown(): void
     {
         $customer = $this->builder()->create(Customer::class);
         $payload = $this->createPersistPayload($customer);
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['name'],
-              $payload['address'],
-              $payload['phone'],
-              $payload['cemeteries'],
-              $payload['transactionHistories']
-          )
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('add')
+            ->with(
+                $payload['identifier'],
+                $payload['name'],
+                $payload['address'],
+                $payload['phone'],
+                $payload['cemeteries'],
+                $payload['transactionHistories']
+            )
+            ->willThrowException(new \InvalidArgumentException());
 
         $controller = new CustomerController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
+            class: AddRequest::class,
             payload: $payload
         );
 
         $this->expectException(BadRequestException::class);
 
-        $controller->create(
+        $controller->add(
+            request: $request,
+            useCase: $useCase
+        );
+    }
+
+    /**
+     * @testdox testAddThrowsConflictWhenConflictExceptionWasThrown createメソッドで不正な引数が与えられたときにConflictHttpExceptionがスローされること.
+     */
+    public function testAddThrowsConflictWhenConflictExceptionWasThrown(): void
+    {
+        $customer = $this->builder()->create(Customer::class);
+        $payload = $this->createPersistPayload($customer);
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(
+                $payload['identifier'],
+                $payload['name'],
+                $payload['address'],
+                $payload['phone'],
+                $payload['cemeteries'],
+                $payload['transactionHistories']
+            )
+            ->willThrowException(new ConflictException());
+
+        $controller = new CustomerController();
+
+        $request = $this->createJsonRequest(
+            class: AddRequest::class,
+            payload: $payload
+        );
+
+        $this->expectException(ConflictHttpException::class);
+
+        $controller->add(
             request: $request,
             useCase: $useCase
         );
@@ -157,22 +202,23 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['name'],
-              $payload['address'],
-              $payload['phone'],
-              $payload['cemeteries'],
-              $payload['transactionHistories']
-          );
+            ->expects($this->once())
+            ->method('update')
+            ->with(
+                $payload['identifier'],
+                $payload['name'],
+                $payload['address'],
+                $payload['phone'],
+                $payload['cemeteries'],
+                $payload['transactionHistories']
+            );
 
         $controller = new CustomerController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
-            payload: $payload
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $customer->identifier()->value()]
         );
 
         $actual = $controller->update(
@@ -194,23 +240,24 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['name'],
-              $payload['address'],
-              $payload['phone'],
-              $payload['cemeteries'],
-              $payload['transactionHistories']
-          )
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(
+                $payload['identifier'],
+                $payload['name'],
+                $payload['address'],
+                $payload['phone'],
+                $payload['cemeteries'],
+                $payload['transactionHistories']
+            )
+            ->willThrowException(new \InvalidArgumentException());
 
         $controller = new CustomerController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
-            payload: $payload
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $customer->identifier()->value()]
         );
 
         $this->expectException(BadRequestException::class);
@@ -231,23 +278,24 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['name'],
-              $payload['address'],
-              $payload['phone'],
-              $payload['cemeteries'],
-              $payload['transactionHistories']
-          )
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(
+                $payload['identifier'],
+                $payload['name'],
+                $payload['address'],
+                $payload['phone'],
+                $payload['cemeteries'],
+                $payload['transactionHistories']
+            )
+            ->willThrowException(new \OutOfBoundsException());
 
         $controller = new CustomerController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
-            payload: $payload
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $customer->identifier()->value()]
         );
 
         $this->expectException(NotFoundHttpException::class);
@@ -268,10 +316,10 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($customer->identifier()->value())
-          ->willReturn($customer);
+            ->expects($this->once())
+            ->method('find')
+            ->with($customer->identifier()->value())
+            ->willReturn($customer);
 
         $controller = new CustomerController();
 
@@ -286,7 +334,7 @@ class CustomerControllerTest extends TestCase
             encoder: $this->encoder
         );
 
-        $this->assertSame($expected, $actual['customer']);
+        $this->assertSame($expected, $actual);
     }
 
     /**
@@ -298,10 +346,10 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($customer->identifier()->value())
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('find')
+            ->with($customer->identifier()->value())
+            ->willThrowException(new \InvalidArgumentException());
 
         $controller = new CustomerController();
 
@@ -328,10 +376,10 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($customer->identifier()->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('find')
+            ->with($customer->identifier()->value())
+            ->willThrowException(new \OutOfBoundsException());
 
         $controller = new CustomerController();
 
@@ -351,27 +399,58 @@ class CustomerControllerTest extends TestCase
 
     /**
      * @testdox testListReturnsSuccessfulResponse listメソッドで正常な値が与えられたときに正常なレスポンスが返却されること.
+     *
+     * @dataProvider provideConditions
      */
-    public function testListReturnsSuccessfulResponse(): void
+    public function testListReturnsSuccessfulResponse(Closure $closure): void
     {
+        $conditions = $closure($this);
+
         $expected = $this->instances
-          ->map(fn (Customer $customer): array => $this->encoder->encode($customer))
-          ->all();
+            ->map(fn (Customer $customer): array => $this->encoder->encode($customer))
+            ->all();
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->willReturn($this->instances);
+            ->expects($this->once())
+            ->method('list')
+            ->with($conditions)
+            ->willReturn($this->instances);
+
+        $request = $this->createGetRequest(
+            class: ListRequest::class,
+            query: $conditions
+        );
 
         $controller = new CustomerController();
 
         $actual = $controller->list(
+            request: $request,
             useCase: $useCase,
             encoder: $this->encoder
         );
 
         $this->assertSame($expected, $actual['customers']);
+    }
+
+    /**
+     * 検索条件を提供するプロバイダ.
+     */
+    public static function provideConditions(): \Generator
+    {
+        yield 'empty' => [fn (): array => []];
+
+        yield 'has name' => [
+            fn (): array => ['name' => Str::random(\mt_rand(1, 255))]
+        ];
+
+        yield 'has postal_code' => [
+            fn (self $self): array => ['postal_code' => $self->generatePostalCode()]
+        ];
+
+        yield 'has phone' => [
+            fn (self $self): array => ['phone' => $self->generatePhone()]
+        ];
     }
 
     /**
@@ -383,9 +462,9 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($customer->identifier()->value());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($customer->identifier()->value());
 
         $controller = new CustomerController();
 
@@ -412,10 +491,10 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($customer->identifier()->value())
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($customer->identifier()->value())
+            ->willThrowException(new \InvalidArgumentException());
 
         $controller = new CustomerController();
 
@@ -441,10 +520,10 @@ class CustomerControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($customer->identifier()->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($customer->identifier()->value())
+            ->willThrowException(new \OutOfBoundsException());
 
         $controller = new CustomerController();
 

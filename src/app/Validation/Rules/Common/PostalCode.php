@@ -15,7 +15,7 @@ class PostalCode extends AssociativeArray
      */
     protected function passes($attribute, $value): bool
     {
-        if (!!is_numeric($value)) {
+        if (!is_array($value)) {
             $this->message = ':attribute must be a numeric string.';
 
             return false;

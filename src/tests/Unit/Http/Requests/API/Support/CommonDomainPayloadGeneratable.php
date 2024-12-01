@@ -12,15 +12,23 @@ use Illuminate\Support\Str;
 trait CommonDomainPayloadGeneratable
 {
     /**
+     * 郵便番号を生成する.
+     */
+    protected function generatePostalCode(array $overrides = []): array
+    {
+        return [
+          'first' => $overrides['postalCode.first'] ?? (string)\mt_rand(100, 999),
+          'second' => $overrides['postalCode.second'] ?? (string)\mt_rand(1000, 9999),
+        ];
+    }
+
+    /**
      * 住所を生成する.
      */
     protected function generateAddress(array $overrides = []): array
     {
         return [
-          'postalCode' => [
-            'first' => $overrides['postalCode.first'] ?? (string)\mt_rand(100, 999),
-            'second' => $overrides['postalCode.second'] ?? (string)\mt_rand(1000, 9999),
-          ],
+          'postalCode' => $overrides['postalCode'] ?? $this->generatePostalCode(),
           'prefecture' => $overrides['prefecture'] ?? Collection::make(Prefecture::cases())->random()->value,
           'city' => $overrides['city'] ?? Str::random(\mt_rand(1, 255)),
           'street' => $overrides['street'] ?? Str::random(\mt_rand(1, 255)),

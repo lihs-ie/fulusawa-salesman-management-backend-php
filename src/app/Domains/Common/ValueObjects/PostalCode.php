@@ -33,8 +33,12 @@ class PostalCode
         return \sprintf('%s-%s', $this->first, $this->second);
     }
 
-    public function equals(PostalCode $other): bool
+    public function equals(?PostalCode $other): bool
     {
+        if (\is_null($other)) {
+            return false;
+        }
+
         return $this->first === $other->first && $this->second === $other->second;
     }
 }

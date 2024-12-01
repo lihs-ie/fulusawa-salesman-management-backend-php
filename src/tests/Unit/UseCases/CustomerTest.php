@@ -3,11 +3,14 @@
 namespace Tests\Unit\UseCases;
 
 use App\Domains\Cemetery\ValueObjects\CemeteryIdentifier;
+use App\Domains\Common\ValueObjects\PhoneNumber;
+use App\Domains\Common\ValueObjects\PostalCode;
 use App\Domains\Customer\CustomerRepository;
 use App\Domains\Customer\Entities\Customer;
+use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\TransactionHistory\ValueObjects\TransactionHistoryIdentifier;
+use App\Exceptions\ConflictException;
 use App\UseCases\Customer as UseCase;
-use App\UseCases\Factories\CommonDomainFactory;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuildable;
 use Tests\TestCase;
@@ -40,9 +43,9 @@ class CustomerTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnCreate persistメソッドで新規の顧客を永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドに正しい値を与えたとき永続化できること.
      */
-    public function testPersistSuccessInCaseOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $expected = $this->builder()->create(Customer::class);
 
@@ -50,7 +53,7 @@ class CustomerTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->add(
             identifier: $parameters['identifier'],
             name: $parameters['name'],
             address: $parameters['address'],
@@ -63,19 +66,46 @@ class CustomerTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnUpdate persistメソッドで既存の顧客を上書き永続化できること.
+     * @testdox testAddThrowsWithConflictIdentifier addメソッドで重複した識別子を指定したとき例外が発生すること.
      */
-    public function testPersistSuccessInCaseOnUpdate(): void
+    public function testAddThrowsWithConflictIdentifier(): void
     {
-        [$useCase, $persisted] = $this->createPersistUseCase();
+        [$useCase] = $this->createPersistUseCase();
 
         $target = $this->instances->random();
 
-        $next = $this->builder()->create(Customer::class, null, ['identifier' => $target->identifier()]);
+        $parameters = $this->createParametersFromEntity($target);
+
+        $this->expectException(ConflictException::class);
+
+        $useCase->add(
+            identifier: $parameters['identifier'],
+            name: $parameters['name'],
+            address: $parameters['address'],
+            phone: $parameters['phone'],
+            cemeteries: $parameters['cemeteries'],
+            transactionHistories: $parameters['transactionHistories'],
+        );
+    }
+
+    /**
+     * @testdox testUpdateSuccessPersistEntity updateメソッドで顧客を更新できること.
+     */
+    public function testUpdateSuccessPersistEntity(): void
+    {
+        $target = $this->instances->random();
+
+        $next = $this->builder()->create(
+            Customer::class,
+            null,
+            ['identifier' => $target->identifier()]
+        );
+
+        [$useCase, $persisted] = $this->createPersistUseCase();
 
         $parameters = $this->createParametersFromEntity($next);
 
-        $useCase->persist(
+        $useCase->update(
             identifier: $parameters['identifier'],
             name: $parameters['name'],
             address: $parameters['address'],
@@ -85,6 +115,29 @@ class CustomerTest extends TestCase
         );
 
         $this->assertPersisted($next, $persisted, Customer::class);
+    }
+
+    /**
+     * @testdox testUpdateThrowsWithMissingIdentifier updateメソッドで存在しない識別子を指定したとき例外が発生すること.
+     */
+    public function testUpdateThrowsWithMissingIdentifier(): void
+    {
+        [$useCase] = $this->createPersistUseCase();
+
+        $instance = $this->builder()->create(Customer::class);
+
+        $parameters = $this->createParametersFromEntity($instance);
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $useCase->update(
+            identifier: $parameters['identifier'],
+            name: $parameters['name'],
+            address: $parameters['address'],
+            phone: $parameters['phone'],
+            cemeteries: $parameters['cemeteries'],
+            transactionHistories: $parameters['transactionHistories'],
+        );
     }
 
     /**
@@ -105,14 +158,17 @@ class CustomerTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsEntities listメソッドで顧客一覧を取得できること.
+     * @dataProvider provideListConditions
      */
-    public function testListSuccessReturnsEntities(): void
+    public function testListSuccessReturnsEntities(\Closure $closure): void
     {
-        $expecteds = clone $this->instances;
+        $conditions = $closure($this);
+
+        $expecteds = $this->createListExpected($conditions);
 
         [$useCase] = $this->createPersistUseCase();
 
-        $actuals = $useCase->list();
+        $actuals = $useCase->list($conditions);
 
         $expecteds
             ->zip($actuals)
@@ -121,6 +177,39 @@ class CustomerTest extends TestCase
                 $this->assertInstanceOf(Customer::class, $actual);
                 $this->assertEntity($expected, $actual);
             });
+    }
+
+    /**
+     * listメソッドの検索条件を提供するプロバイダ.
+     */
+    public static function provideListConditions(): \Generator
+    {
+        $instance = fn (self $self): Customer => $self->instances->random();
+
+        yield 'name' => [fn (self $self): array => ['name' => $instance($self)->lastName()]];
+
+        yield 'postalCode' => [function (self $self) use ($instance): array {
+            $target = $instance($self);
+
+            return [
+                'postalCode' => [
+                    'first' => $target->address()->postalCode()->first(),
+                    'second' => $target->address()->postalCode()->second(),
+                ],
+            ];
+        }];
+
+        yield 'phone' => [function (self $self) use ($instance): array {
+            $target = $instance($self);
+
+            return [
+                'phone' => [
+                    'areaCode' => $target->phone()->areaCode(),
+                    'localCode' => $target->phone()->localCode(),
+                    'subscriberNumber' => $target->phone()->subscriberNumber(),
+                ],
+            ];
+        }];
     }
 
     /**
@@ -147,6 +236,20 @@ class CustomerTest extends TestCase
         $removed->each(function (Customer $instance) use ($target): void {
             $this->assertFalse($instance->identifier()->equals($target->identifier()));
         });
+    }
+
+    /**
+     * @testdox testDeleteThrowsWithMissingIdentifier deleteメソッドで存在しない識別子を指定したとき例外が発生すること.
+     */
+    public function testDeleteThrowsWithMissingIdentifier(): void
+    {
+        [$useCase] = $this->createPersistUseCase();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $useCase->delete(
+            identifier: $this->builder()->create(CustomerIdentifier::class)->value()
+        );
     }
 
     /**
@@ -216,7 +319,7 @@ class CustomerTest extends TestCase
     {
         return [
             'identifier' => $entity->identifier()->value(),
-            'name' => ['lastName' => $entity->lastName(), 'firstName' => $entity->firstName()],
+            'name' => ['last' => $entity->lastName(), 'first' => $entity->firstName()],
             'address' => [
                 'postalCode' => [
                     'first' => $entity->address()->postalCode()->first(),
@@ -240,5 +343,51 @@ class CustomerTest extends TestCase
                 ->map(fn (TransactionHistoryIdentifier $history): string => $history->value())
                 ->all(),
         ];
+    }
+
+    /**
+     * 検索条件からlistメソッドの期待値を生成する.
+     */
+    private function createListExpected(array $conditions): Enumerable
+    {
+        $name = $conditions['name'] ?? null;
+
+        $postalCode = isset($conditions['postalCode']) ? $this->builder()->create(
+            PostalCode::class,
+            null,
+            ['first' => $conditions['postalCode']['first'], 'second' => $conditions['postalCode']['second']]
+        ) : null;
+
+        $phone = isset($conditions['phone']) ? $this->builder()->create(
+            PhoneNumber::class,
+            null,
+            [
+                'areaCode' => $conditions['phone']['areaCode'],
+                'localCode' => $conditions['phone']['localCode'],
+                'subscriberNumber' => $conditions['phone']['subscriberNumber'],
+            ]
+        ) : null;
+
+
+        return $this->instances
+            ->when(
+                !\is_null($name),
+                fn (Enumerable $instances): Enumerable => $instances->filter(
+                    fn (Customer $instance): bool =>
+                    str_contains($instance->lastName(), $name) ||  str_contains($instance->firstName(), $name)
+                )
+            )
+            ->when(
+                !\is_null($postalCode),
+                fn (Enumerable $instances): Enumerable => $instances->filter(
+                    fn (Customer $instance): bool => $postalCode->equals($instance->address()->postalCode())
+                )
+            )
+            ->when(
+                !\is_null($phone),
+                fn (Enumerable $instances): Enumerable => $instances->filter(
+                    fn (Customer $instance): bool => $phone->equals($instance->phone())
+                )
+            );
     }
 }

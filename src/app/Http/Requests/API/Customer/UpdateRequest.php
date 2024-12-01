@@ -6,9 +6,9 @@ use App\Http\Requests\API\AbstractRequest;
 use App\Validation\Rules;
 
 /**
- * 顧客新規永続化リクエスト.
+ * 顧客更新リクエスト.
  */
-class PersistRequest extends AbstractRequest
+class UpdateRequest extends AbstractRequest
 {
     /**
      * {@inheritdoc}
@@ -27,5 +27,13 @@ class PersistRequest extends AbstractRequest
           'transactionHistories' => ['array'],
           'transactionHistories.*' => ['uuid'],
         ];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function routeParameterNames(): array
+    {
+        return ['identifier'];
     }
 }
