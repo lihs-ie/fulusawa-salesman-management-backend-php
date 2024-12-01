@@ -2,20 +2,26 @@
 
 namespace Tests\Unit\Http\Controllers\API;
 
+use App\Domains\Common\ValueObjects\DateTimeRange;
 use App\Domains\DailyReport\Entities\DailyReport as Entity;
 use App\Domains\Schedule\ValueObjects\ScheduleIdentifier;
 use App\Domains\Visit\ValueObjects\VisitIdentifier;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\API\DailyReportController;
 use App\Http\Encoders\DailyReport\DailyReportEncoder;
+use App\Http\Requests\API\DailyReport\AddRequest;
 use App\Http\Requests\API\DailyReport\DeleteRequest;
 use App\Http\Requests\API\DailyReport\FindRequest;
 use App\Http\Requests\API\DailyReport\ListRequest;
-use App\Http\Requests\API\DailyReport\PersistRequest;
+use App\Http\Requests\API\DailyReport\UpdateRequest;
 use App\UseCases\DailyReport as UseCase;
+use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\Support\DependencyBuildable;
 use Tests\Support\Helpers\Http\RequestGeneratable;
@@ -67,9 +73,9 @@ class DailyReportControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateSuccessReturnsResponse createメソッドで新規の日報を作成し、レスポンスを返却すること.
+     * @testdox testAddSuccessReturnsResponse createメソッドで新規の日報を作成し、レスポンスを返却すること.
      */
-    public function testCreateSuccessReturnsResponse(): void
+    public function testAddSuccessReturnsResponse(): void
     {
         $entity = $this->builder()->create(Entity::class);
 
@@ -77,25 +83,18 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['user'],
-              $payload['date'],
-              $payload['schedules'],
-              $payload['visits'],
-              $payload['isSubmitted'],
-          );
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload);
 
         $controller = new DailyReportController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
+            class: AddRequest::class,
             payload: $payload
         );
 
-        $actual = $controller->create(
+        $actual = $controller->add(
             request: $request,
             useCase: $useCase,
         );
@@ -105,36 +104,58 @@ class DailyReportControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateThrowsBadRequestWithInvalidArgumentException createメソッドで不正な引数が渡されたときBadRequestHttpExceptionをスローすること.
+     * @testdox testAddThrowsBadRequestWithInvalidArgumentException createメソッドで不正な引数が渡されたときBadRequestHttpExceptionをスローすること.
      */
-    public function testCreateThrowsBadRequestWithInvalidArgumentException(): void
+    public function testAddThrowsBadRequestWithInvalidArgumentException(): void
     {
         $payload = $this->encoder->encode($this->instances->random());
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['user'],
-              $payload['date'],
-              $payload['schedules'],
-              $payload['visits'],
-              $payload['isSubmitted'],
-          )
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException());
 
         $controller = new DailyReportController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
+            class: AddRequest::class,
             payload: $payload
         );
 
         $this->expectException(BadRequestHttpException::class);
 
-        $controller->create(
+        $controller->add(
+            request: $request,
+            useCase: $useCase,
+        );
+    }
+
+    /**
+     * @testdox testAddThrowsConflictHttpExceptionWithConflictException createメソッドで日報が既に存在するときConflictHttpExceptionをスローすること.
+     */
+    public function testAddThrowsConflictHttpExceptionWithConflictException(): void
+    {
+        $payload = $this->encoder->encode($this->instances->random());
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new ConflictException());
+
+        $controller = new DailyReportController();
+
+        $request = $this->createJsonRequest(
+            class: AddRequest::class,
+            payload: $payload
+        );
+
+        $this->expectException(ConflictHttpException::class);
+
+        $controller->add(
             request: $request,
             useCase: $useCase,
         );
@@ -151,22 +172,16 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['user'],
-              $payload['date'],
-              $payload['schedules'],
-              $payload['visits'],
-              $payload['isSubmitted'],
-          );
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload);
 
         $controller = new DailyReportController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
-            payload: $payload
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $entity->identifier()->value()]
         );
 
         $actual = $controller->update(
@@ -187,23 +202,17 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['user'],
-              $payload['date'],
-              $payload['schedules'],
-              $payload['visits'],
-              $payload['isSubmitted'],
-          )
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException());
 
         $controller = new DailyReportController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
-            payload: $payload
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $payload['identifier']]
         );
 
         $this->expectException(BadRequestHttpException::class);
@@ -223,23 +232,17 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(
-              $payload['identifier'],
-              $payload['user'],
-              $payload['date'],
-              $payload['schedules'],
-              $payload['visits'],
-              $payload['isSubmitted'],
-          )
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \OutOfBoundsException());
 
         $controller = new DailyReportController();
 
         $request = $this->createJsonRequest(
-            class: PersistRequest::class,
-            payload: $payload
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $payload['identifier']]
         );
 
         $this->expectException(NotFoundHttpException::class);
@@ -259,10 +262,10 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($entity->identifier()->value())
-          ->willReturn($entity);
+            ->expects($this->once())
+            ->method('find')
+            ->with($entity->identifier()->value())
+            ->willReturn($entity);
 
         $controller = new DailyReportController();
 
@@ -290,10 +293,10 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($entity->identifier()->value())
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('find')
+            ->with($entity->identifier()->value())
+            ->willThrowException(new \InvalidArgumentException());
 
         $controller = new DailyReportController();
 
@@ -320,10 +323,10 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($entity->identifier()->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('find')
+            ->with($entity->identifier()->value())
+            ->willThrowException(new \OutOfBoundsException());
 
         $controller = new DailyReportController();
 
@@ -342,20 +345,24 @@ class DailyReportControllerTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccessReturnsSuccessfulResponseWithEmptyConditions listメソッドに空の検索条件を与えたとき正常なレスポンスを返却すること.
+     * @testdox testListSuccessReturnsEntities listメソッドに正常な値を与えたとき正常なレスポンスを返却すること.
+     * @dataProvider provideConditions
      */
-    public function testListSuccessReturnsSuccessfulResponseWithEmptyConditions(): void
+    public function testListSuccessReturnsEntities(Closure $closure): void
     {
+        $conditions = $closure($this);
+        $expecteds = $this->createListExpected($conditions);
+
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->with([])
-          ->willReturn($this->instances);
+            ->expects($this->once())
+            ->method('list')
+            ->with($conditions)
+            ->willReturn($expecteds);
 
         $controller = new DailyReportController();
 
-        $request = $this->createGetRequest(class: ListRequest::class);
+        $request = $this->createGetRequest(class: ListRequest::class, query: $conditions);
 
         $actual = $controller->list(
             request: $request,
@@ -364,67 +371,42 @@ class DailyReportControllerTest extends TestCase
         );
 
         $this->assertIsArray($actual);
+        $this->assertCount($expecteds->count(), $actual['dailyReports']);
 
-        $this->instances
-          ->zip(Collection::make($actual))
-          ->eachSpread(function (?Entity $expected, ?array $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertNotNull($actual);
-              $this->assertEntity($expected, $actual);
-          });
+        $expecteds
+            ->zip(Collection::make($actual['dailyReports']))
+            ->eachSpread(function (?Entity $expected, ?array $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertNotNull($actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
-     * @testdox testListSuccessReturnsSuccessfulResponseWithConditions listメソッドに検索条件を与えたとき正常なレスポンスを返却すること.
+     * 検索条件を提供するプロパイダ.
      */
-    public function testListSuccessReturnsSuccessfulResponseWithConditions(): void
+    public static function provideConditions(): \Generator
     {
-        $instance = $this->instances->random();
+        yield 'empty' => [fn (): array => []];
 
-        $user = $instance->user();
-        $date = $instance->date();
-        $isSubmitted = $instance->isSubmitted();
+        yield 'user' => [fn (self $self): array => [
+            'user' => $self->instances->random()->user()->value()
+        ]];
 
-        $expecteds = $this->instances
-          ->filter(fn (Entity $entity): bool => $entity->user()->equals($user))
-          ->filter(fn (Entity $entity): bool => $entity->date()->toAtomString() === $date->toAtomString())
-          ->filter(fn (Entity $entity): bool => $entity->isSubmitted() === $isSubmitted);
+        yield 'date' => [function (self $self): array {
+            $instance = $self->instances->random();
 
-        $request = $this->createGetRequest(
-            class: ListRequest::class,
-            query: [
-            'user' => $user->value(),
-            'date' => [
-              'start' => $date->toAtomString(),
-              'end' => $date->toAtomString(),
-            ],
-            'isSubmitted' => $isSubmitted,
-      ]
-        );
+            return [
+                'date' => [
+                    'start' => $instance->date()->setTime(0, 0, 0)->toAtomString(),
+                    'end' => $instance->date()->setTime(23, 59, 59)->toAtomString(),
+                ]
+            ];
+        }];
 
-        $useCase = $this->createMock(UseCase::class);
-        $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->with($request->all())
-          ->willReturn($expecteds);
-
-        $controller = new DailyReportController();
-
-        $actual = $controller->list(
-            request: $request,
-            useCase: $useCase,
-            encoder: $this->encoder
-        );
-
-        $this->assertIsArray($actual);
-        $expecteds
-          ->zip(Collection::make($actual))
-          ->eachSpread(function (?Entity $expected, ?array $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertNotNull($actual);
-              $this->assertEntity($expected, $actual);
-          });
+        yield 'isSubmitted' => [fn (): array => [
+            'isSubmitted' => (bool) \mt_rand(0, 1)
+        ]];
     }
 
     /**
@@ -434,9 +416,9 @@ class DailyReportControllerTest extends TestCase
     {
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('list')
+            ->willThrowException(new \InvalidArgumentException());
 
         $controller = new DailyReportController();
 
@@ -460,9 +442,9 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($entity->identifier()->value());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($entity->identifier()->value());
 
         $controller = new DailyReportController();
 
@@ -490,10 +472,10 @@ class DailyReportControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($entity->identifier()->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($entity->identifier()->value())
+            ->willThrowException(new \OutOfBoundsException());
 
         $controller = new DailyReportController();
 
@@ -542,5 +524,40 @@ class DailyReportControllerTest extends TestCase
         $this->assertSame($expectedVisits, $actual['visits']);
 
         $this->assertSame($expected->isSubmitted(), $actual['isSubmitted']);
+    }
+
+    /**
+     * listメソッドの期待値を生成する.
+     */
+    private function createListExpected(array $conditions): Enumerable
+    {
+        return $this->instances
+            ->when(
+                isset($conditions['user']),
+                fn (Enumerable $instances): Enumerable => $instances->filter(
+                    fn (Entity $instance): bool => $instance->user()->value() === $conditions['user']
+                )
+            )
+            ->when(
+                isset($conditions['date']),
+                fn (Enumerable $instances) => $instances->filter(
+                    function (Entity $instance) use ($conditions): bool {
+                        $range = $this->builder()->create(
+                            class: DateTimeRange::class,
+                            overrides: [
+                                'start' => CarbonImmutable::parse($conditions['date']['start']),
+                                'end' => CarbonImmutable::parse($conditions['date']['end']),
+                            ]
+                        );
+
+                        return $range->includes($instance->date());
+                    }
+                )
+            )
+            ->when(
+                isset($conditions['isSubmitted']),
+                fn (Enumerable $instances) => $instances->filter(fn (Entity $instance): bool => $instance->isSubmitted() === $conditions['isSubmitted'])
+            )
+            ->values();
     }
 }

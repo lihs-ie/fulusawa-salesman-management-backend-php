@@ -90,7 +90,7 @@ Route::prefix('daily-reports')
 
         $sanctum(Role::USER)
             ->group(function (): void {
-                Route::post('', 'create');
+                Route::post('', 'add');
                 Route::put('{identifier}', 'update');
             });
 

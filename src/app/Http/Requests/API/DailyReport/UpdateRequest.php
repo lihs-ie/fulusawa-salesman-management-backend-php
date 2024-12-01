@@ -5,9 +5,9 @@ namespace App\Http\Requests\API\DailyReport;
 use App\Http\Requests\API\AbstractRequest;
 
 /**
- * 日報永続化リクエスト.
+ * 日報更新リクエスト.
  */
-class PersistRequest extends AbstractRequest
+class UpdateRequest extends AbstractRequest
 {
     /**
      * {@inheritdoc}
@@ -24,5 +24,13 @@ class PersistRequest extends AbstractRequest
           'visits.*' => ['string', 'uuid'],
           'isSubmitted' => ['required', 'boolean'],
         ];
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function routeParameterNames(): array
+    {
+        return ['identifier'];
     }
 }
