@@ -3,18 +3,15 @@
 namespace App\Http\Controllers\API;
 
 use App\Domains\DailyReport\Entities\DailyReport;
-use App\Exceptions\ConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Encoders\DailyReport\DailyReportEncoder;
-use App\Http\Requests\API\DailyReport\AddRequest;
 use App\Http\Requests\API\DailyReport\DeleteRequest;
 use App\Http\Requests\API\DailyReport\FindRequest;
 use App\Http\Requests\API\DailyReport\ListRequest;
-use App\Http\Requests\API\DailyReport\UpdateRequest;
+use App\Http\Requests\API\DailyReport\PersistRequest;
 use App\UseCases\DailyReport as UseCase;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
-use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -23,18 +20,18 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 class DailyReportController extends Controller
 {
     /**
-     * 日報追加.
+     * 日報作成.
      *
-     * @param AddRequest $request
+     * @param PersistRequest $request
      * @param UseCase $useCase
      * @return Response
      */
-    public function add(AddRequest $request, UseCase $useCase): Response
+    public function create(PersistRequest $request, UseCase $useCase): Response
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->add(
+            $useCase->persist(
                 identifier: $parameters['identifier'],
                 user: $parameters['user'],
                 date: $parameters['date'],
@@ -46,24 +43,22 @@ class DailyReportController extends Controller
             return new Response('', Response::HTTP_CREATED);
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
-        } catch (ConflictException $exception) {
-            throw new ConflictHttpException($exception->getMessage());
         }
     }
 
     /**
      * 日報更新.
      *
-     * @param UpdateRequest $request
+     * @param PersistRequest $request
      * @param UseCase $useCase
      * @return Response
      */
-    public function update(UpdateRequest $request, UseCase $useCase): Response
+    public function update(PersistRequest $request, UseCase $useCase): Response
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->update(
+            $useCase->persist(
                 identifier: $parameters['identifier'],
                 user: $parameters['user'],
                 date: $parameters['date'],
@@ -96,8 +91,8 @@ class DailyReportController extends Controller
         try {
             $entity = $useCase->find($parameters['identifier']);
 
-            return $encoder->encode($entity);
-        } catch (\InvalidArgumentException | \UnexpectedValueException $exception) {
+            return ['dailyReport' => $encoder->encode($entity)];
+        } catch (\InvalidArgumentException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
         } catch (\OutOfBoundsException $exception) {
             throw new NotFoundHttpException($exception->getMessage());
@@ -121,9 +116,9 @@ class DailyReportController extends Controller
             $dailyReports = $useCase->list($request->all());
 
             return [
-                'dailyReports' => $dailyReports
-                    ->map(fn (DailyReport $dailyReport): array => $encoder->encode($dailyReport))
-                    ->all(),
+              'dailyReports' => $dailyReports->map(fn (DailyReport $dailyReport): array => $encoder->encode($dailyReport))
+                ->values()
+                ->all(),
             ];
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestHttpException($exception->getMessage());

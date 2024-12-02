@@ -99,20 +99,16 @@ class ListRequestTest extends TestCase
             'invalid format' => 'invalid',
             'invalid type' => \mt_rand(1, 255)
           ],
-          'date' => [
+          'date.start' => [
+            'invalid format' => 'invalid',
+            'invalid type' => \mt_rand(1, 255),
+          ],
+          'date.end' => [
             'invalid format' => 'invalid',
             'invalid type' => \mt_rand(1, 255),
             'start after end' => [
               'start' => CarbonImmutable::now()->toAtomString(),
               'end' => CarbonImmutable::now()->subDays(7)->toAtomString()
-            ],
-            'invalid start' => [
-              'start' => 'invalid',
-              'end' => CarbonImmutable::now()->toAtomString()
-            ],
-            'invalid end' => [
-              'start' => CarbonImmutable::now()->subDays(7)->toAtomString(),
-              'end' => 'invalid'
             ]
           ],
           'isSubmitted' => [
