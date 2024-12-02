@@ -41,7 +41,7 @@ class DeleteRequestTest extends TestCase
     protected function createDefaultRoute(): array
     {
         return [
-          'identifier' => Uuid::uuid7()->toString()
+            'identifier' => Uuid::uuid7()->toString()
         ];
     }
 
@@ -50,7 +50,9 @@ class DeleteRequestTest extends TestCase
      */
     protected function getValidPayloadPatterns(): array
     {
-        return [];
+        return [
+            'default' => []
+        ];
     }
 
     /**
@@ -75,12 +77,12 @@ class DeleteRequestTest extends TestCase
     protected function getInvalidRoutePatterns(): array
     {
         return [
-          'identifier' => [
-            'invalid type' => [\mt_rand(1, 255)],
-            'invalid format' => ['invalid'],
-            'null' => [null],
-            'empty' => [''],
-          ]
+            'identifier' => [
+                'invalid type' => [\mt_rand(1, 255)],
+                'invalid format' => ['invalid'],
+                'null' => [null],
+                'empty' => [''],
+            ]
         ];
     }
 }

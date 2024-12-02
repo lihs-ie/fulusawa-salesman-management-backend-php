@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Http\Requests\API\DailyReport;
 
-use App\Http\Requests\API\DailyReport\PersistRequest;
+use App\Http\Requests\API\DailyReport\UpdateRequest;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Ramsey\Uuid\Uuid;
@@ -17,7 +17,7 @@ use Tests\Unit\Http\Requests\API\CommandRequestTest;
  *
  * @coversNothing
  */
-class PersistRequestTest extends TestCase
+class UpdateRequestTest extends TestCase
 {
     use CommandRequestTest;
 
@@ -26,7 +26,7 @@ class PersistRequestTest extends TestCase
      */
     protected function target(): string
     {
-        return PersistRequest::class;
+        return UpdateRequest::class;
     }
 
     /**
@@ -35,7 +35,6 @@ class PersistRequestTest extends TestCase
     protected function createDefaultPayload(): array
     {
         return [
-          'identifier' => Uuid::uuid7()->toString(),
           'user' => Uuid::uuid7()->toString(),
           'date' => CarbonImmutable::now()->toAtomString(),
           'schedules' => Collection::times(\mt_rand(1, 5), fn (): string => Uuid::uuid7()->toString())
@@ -51,7 +50,9 @@ class PersistRequestTest extends TestCase
      */
     protected function createDefaultRoute(): array
     {
-        return [];
+        return [
+          'identifier' => Uuid::uuid7()->toString(),
+        ];
     }
 
     /**
@@ -78,12 +79,6 @@ class PersistRequestTest extends TestCase
     protected function getInvalidPayloadPatterns(): array
     {
         return [
-          'identifier' => [
-            'invalid type' => \mt_rand(1, 255),
-            'invalid format' => 'invalid',
-            'null' => null,
-            'empty' => '',
-          ],
           'user' => [
             'invalid type' => \mt_rand(1, 255),
             'invalid format' => 'invalid',
@@ -141,6 +136,13 @@ class PersistRequestTest extends TestCase
      */
     protected function getInvalidRoutePatterns(): array
     {
-        return [];
+        return [
+          'identifier' => [
+            'invalid type' => \mt_rand(1, 255),
+            'invalid format' => 'invalid',
+            'null' => null,
+            'empty' => '',
+          ],
+        ];
     }
 }
