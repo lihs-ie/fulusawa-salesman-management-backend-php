@@ -9,6 +9,7 @@ use App\Domains\Feedback\ValueObjects\FeedbackStatus;
 use App\Domains\Feedback\ValueObjects\FeedbackType;
 use App\Domains\User\ValueObjects\Role;
 use App\Infrastructures\Feedback\Models\Feedback as Record;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
@@ -60,19 +61,19 @@ class FeedbackControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateSuccessReturnsSuccessfulResponse フィードバック追加APIを実行すると成功レスポンスが返却されること.
+     * @testdox testAddSuccessReturnsSuccessfulResponse フィードバック追加APIを実行すると成功レスポンスが返却されること.
      */
-    public function testCreateSuccessReturnsSuccessfulResponse(): void
+    public function testAddSuccessReturnsSuccessfulResponse(): void
     {
         $entity = $this->builder()->create(Entity::class);
 
         $payload = [
-          'identifier' => $entity->identifier()->value(),
-          'type' => $entity->type()->name,
-          'status' => $entity->status()->name,
-          'content' => $entity->content(),
-          'createdAt' => $entity->createdAt()->toAtomString(),
-          'updatedAt' => $entity->updatedAt()->toAtomString(),
+            'identifier' => $entity->identifier()->value(),
+            'type' => $entity->type()->name,
+            'status' => $entity->status()->name,
+            'content' => $entity->content(),
+            'createdAt' => $entity->createdAt()->toAtomString(),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -80,33 +81,24 @@ class FeedbackControllerTest extends TestCase
             Role::USER
         );
 
-        $response->assertSuccessful();
-        $response->assertStatus(201);
-
-        $this->assertDatabaseHas('feedbacks', [
-          'identifier' => $entity->identifier()->value(),
-          'type' => $entity->type()->name,
-          'status' => $entity->status()->name,
-          'content' => $entity->content(),
-          'created_at' => $entity->createdAt()->toAtomString(),
-          'updated_at' => $entity->updatedAt()->toAtomString(),
-        ]);
+        $response->assertCreated();
+        $this->assertPersisted($payload);
     }
 
     /**
-     * @testdox testCreateFailureReturnsForbiddenWithAdminRole フィードバック追加APIを管理者権限で実行すると403エラーが返却されること.
+     * @testdox testAddFailureReturnsForbiddenWithAdminRole フィードバック追加APIを管理者権限で実行すると403エラーが返却されること.
      */
-    public function testCreateFailureReturnsForbiddenWithAdminRole(): void
+    public function testAddFailureReturnsForbiddenWithAdminRole(): void
     {
         $entity = $this->builder()->create(Entity::class);
 
         $payload = [
-          'identifier' => $entity->identifier()->value(),
-          'type' => $entity->type()->name,
-          'status' => $entity->status()->name,
-          'content' => $entity->content(),
-          'createdAt' => $entity->createdAt()->toAtomString(),
-          'updatedAt' => $entity->updatedAt()->toAtomString(),
+            'identifier' => $entity->identifier()->value(),
+            'type' => $entity->type()->name,
+            'status' => $entity->status()->name,
+            'content' => $entity->content(),
+            'createdAt' => $entity->createdAt()->toAtomString(),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -118,24 +110,56 @@ class FeedbackControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateFailureReturnsUnauthorizedWithoutAuthentication フィードバック追加APIを未認証で実行すると401エラーが返却されること.
+     * @testdox testAddFailureReturnsUnauthorizedWithoutAuthentication フィードバック追加APIを未認証で実行すると401エラーが返却されること.
      */
-    public function testCreateFailureReturnsUnauthorizedWithoutAuthentication(): void
+    public function testAddFailureReturnsUnauthorizedWithoutAuthentication(): void
     {
         $entity = $this->builder()->create(Entity::class);
 
         $payload = [
-          'identifier' => $entity->identifier()->value(),
-          'type' => $entity->type()->name,
-          'status' => $entity->status()->name,
-          'content' => $entity->content(),
-          'createdAt' => $entity->createdAt()->toAtomString(),
-          'updatedAt' => $entity->updatedAt()->toAtomString(),
+            'identifier' => $entity->identifier()->value(),
+            'type' => $entity->type()->name,
+            'status' => $entity->status()->name,
+            'content' => $entity->content(),
+            'createdAt' => $entity->createdAt()->toAtomString(),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
         ];
 
         $response = $this->hitCreateAPI($payload);
 
         $response->assertUnauthorized();
+    }
+
+    /**
+     * @testdox testAddFailureReturnsConflictWithDuplicateIdentifier フィードバック追加APIを重複識別子で実行すると409エラーが返却されること.
+     */
+    public function testAddFailureReturnsConflictWithDuplicateIdentifier(): void
+    {
+        $record = $this->records->random();
+
+        $entity = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(
+                FeedbackIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
+        ]);
+
+        $payload = [
+            'identifier' => $entity->identifier()->value(),
+            'type' => $entity->type()->name,
+            'status' => $entity->status()->name,
+            'content' => $entity->content(),
+            'createdAt' => $entity->createdAt()->toAtomString(),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
+        ];
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitCreateAPI($payload, $accessToken),
+            Role::USER
+        );
+
+        $response->assertConflict();
     }
 
     /**
@@ -146,20 +170,20 @@ class FeedbackControllerTest extends TestCase
         $record = $this->records->random();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              FeedbackIdentifier::class,
-              null,
-              ['value' => $record->identifier]
-          ),
+            'identifier' => $this->builder()->create(
+                FeedbackIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
         ]);
 
         $payload = [
-          'identifier' => $record->identifier,
-          'type' => $entity->type()->name,
-          'status' => $entity->status()->name,
-          'content' => $entity->content(),
-          'createdAt' => $entity->createdAt()->toAtomString(),
-          'updatedAt' => $entity->updatedAt()->toAtomString(),
+            'identifier' => $entity->identifier()->value(),
+            'type' => $entity->type()->name,
+            'status' => $entity->status()->name,
+            'content' => $entity->content(),
+            'createdAt' => CarbonImmutable::parse($record->created_at),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -167,17 +191,8 @@ class FeedbackControllerTest extends TestCase
             Role::ADMIN
         );
 
-        $response->assertSuccessful();
-        $response->assertStatus(204);
-
-        $this->assertDatabaseHas('feedbacks', [
-          'identifier' => $entity->identifier()->value(),
-          'type' => $entity->type()->name,
-          'status' => $entity->status()->name,
-          'content' => $entity->content(),
-          'created_at' => $entity->createdAt()->toAtomString(),
-          'updated_at' => $entity->updatedAt()->toAtomString(),
-        ]);
+        $response->assertNoContent();
+        $this->assertPersisted($payload);
     }
 
     /**
@@ -188,20 +203,20 @@ class FeedbackControllerTest extends TestCase
         $record = $this->records->random();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              FeedbackIdentifier::class,
-              null,
-              ['value' => $record->identifier]
-          ),
+            'identifier' => $this->builder()->create(
+                FeedbackIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
         ]);
 
         $payload = [
-          'identifier' => $record->identifier,
-          'type' => $entity->type()->name,
-          'status' => $entity->status()->name,
-          'content' => $entity->content(),
-          'createdAt' => $entity->createdAt()->toAtomString(),
-          'updatedAt' => $entity->updatedAt()->toAtomString(),
+            'identifier' => $record->identifier,
+            'type' => $entity->type()->name,
+            'status' => $entity->status()->name,
+            'content' => $entity->content(),
+            'createdAt' => $entity->createdAt()->toAtomString(),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -220,25 +235,49 @@ class FeedbackControllerTest extends TestCase
         $record = $this->records->random();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              FeedbackIdentifier::class,
-              null,
-              ['value' => $record->identifier]
-          ),
+            'identifier' => $this->builder()->create(
+                FeedbackIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
         ]);
 
         $payload = [
-          'identifier' => $record->identifier,
-          'type' => $entity->type()->name,
-          'status' => $entity->status()->name,
-          'content' => $entity->content(),
-          'createdAt' => $entity->createdAt()->toAtomString(),
-          'updatedAt' => $entity->updatedAt()->toAtomString(),
+            'identifier' => $record->identifier,
+            'type' => $entity->type()->name,
+            'status' => $entity->status()->name,
+            'content' => $entity->content(),
+            'createdAt' => $entity->createdAt()->toAtomString(),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
         ];
 
         $response = $this->hitUpdateAPI($payload);
 
         $response->assertUnauthorized();
+    }
+
+    /**
+     * @testdox testUpdateFailureReturnsNotFoundWithMissingIdentifier フィードバック更新APIを存在しない識別子で実行すると404エラーが返却されること.
+     */
+    public function testUpdateFailureReturnsNotFoundWithMissingIdentifier(): void
+    {
+        $entity = $this->builder()->create(Entity::class);
+
+        $payload = [
+            'identifier' => $entity->identifier()->value(),
+            'type' => $entity->type()->name,
+            'status' => $entity->status()->name,
+            'content' => $entity->content(),
+            'createdAt' => $entity->createdAt()->toAtomString(),
+            'updatedAt' => $entity->updatedAt()->toAtomString(),
+        ];
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($payload, $accessToken),
+            Role::ADMIN
+        );
+
+        $response->assertNotFound();
     }
 
     /**
@@ -251,12 +290,12 @@ class FeedbackControllerTest extends TestCase
         $target = $this->records->random();
 
         $expected = [
-          'identifier' => $target->identifier,
-          'type' => $target->type,
-          'status' => $target->status,
-          'content' => $target->content,
-          'createdAt' => $target->created_at->format(\DATE_ATOM),
-          'updatedAt' => $target->updated_at->format(\DATE_ATOM),
+            'identifier' => $target->identifier,
+            'type' => $target->type,
+            'status' => $target->status,
+            'content' => $target->content,
+            'createdAt' => $target->created_at->format(\DATE_ATOM),
+            'updatedAt' => $target->updated_at->format(\DATE_ATOM),
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -308,20 +347,20 @@ class FeedbackControllerTest extends TestCase
         };
 
         $expected = [
-          'feedback' => $this->records
-            ->when(isset($conditions['type']), fn (Enumerable $records): Enumerable => $records->where('type', $conditions['type']))
-            ->when(isset($conditions['status']), fn (Enumerable $records): Enumerable => $records->where('status', $conditions['status']))
-            ->when(isset($conditions['sort']), fn (Enumerable $records): Enumerable => $sortBy($records, $conditions['sort']))
-            ->map(fn (Record $record): array => [
-              'identifier' => $record->identifier,
-              'type' => $record->type,
-              'status' => $record->status,
-              'content' => $record->content,
-              'createdAt' => $record->created_at->format(\DATE_ATOM),
-              'updatedAt' => $record->updated_at->format(\DATE_ATOM),
-            ])
-            ->values()
-            ->all()
+            'feedbacks' => $this->records
+                ->when(isset($conditions['type']), fn (Enumerable $records): Enumerable => $records->where('type', $conditions['type']))
+                ->when(isset($conditions['status']), fn (Enumerable $records): Enumerable => $records->where('status', $conditions['status']))
+                ->when(isset($conditions['sort']), fn (Enumerable $records): Enumerable => $sortBy($records, $conditions['sort']))
+                ->map(fn (Record $record): array => [
+                    'identifier' => $record->identifier,
+                    'type' => $record->type,
+                    'status' => $record->status,
+                    'content' => $record->content,
+                    'createdAt' => $record->created_at->format(\DATE_ATOM),
+                    'updatedAt' => $record->updated_at->format(\DATE_ATOM),
+                ])
+                ->values()
+                ->all()
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -331,6 +370,28 @@ class FeedbackControllerTest extends TestCase
 
         $response->assertSuccessful();
         $response->assertJson($expected);
+    }
+
+    /**
+     * 検索条件を提供するプロバイダ.
+     */
+    public static function provideConditions(): \Generator
+    {
+        yield 'empty' => [[]];
+
+        yield 'type' => [['type' => Collection::make(FeedbackType::cases())->random()->name]];
+
+        yield 'status' => [['status' => Collection::make(FeedbackStatus::cases())->random()->name]];
+
+        yield 'sort' => [['sort' => Collection::make(Sort::cases())->random()->name]];
+
+        yield 'full' => [
+            [
+                'type' => Collection::make(FeedbackType::cases())->random()->name,
+                'status' => Collection::make(FeedbackStatus::cases())->random()->name,
+                'sort' => Collection::make(Sort::cases())->random()->name,
+            ],
+        ];
     }
 
     /**
@@ -354,28 +415,6 @@ class FeedbackControllerTest extends TestCase
     }
 
     /**
-     * 検索条件を提供するプロバイダ.
-     */
-    public static function provideConditions(): \Generator
-    {
-        yield 'empty' => [[]];
-
-        yield 'type' => [['type' => Collection::make(FeedbackType::cases())->random()->name]];
-
-        yield 'status' => [['status' => Collection::make(FeedbackStatus::cases())->random()->name]];
-
-        yield 'sort' => [['sort' => Collection::make(Sort::cases())->random()->name]];
-
-        yield 'full' => [
-          [
-            'type' => Collection::make(FeedbackType::cases())->random()->name,
-            'status' => Collection::make(FeedbackStatus::cases())->random()->name,
-            'sort' => Collection::make(Sort::cases())->random()->name,
-          ],
-        ];
-    }
-
-    /**
      * テストに使用するレコードを生成する.
      */
     private function createRecords(): Enumerable
@@ -389,7 +428,7 @@ class FeedbackControllerTest extends TestCase
     private function hitCreateAPI(array $payload, string|null $accessToken = null): TestResponse
     {
         return $this->postJson(
-            uri: '/api/feedback',
+            uri: '/api/feedbacks',
             data: $payload,
             headers: \is_null($accessToken) ? [] : ['Authorization' => "Bearer {$accessToken}"]
         );
@@ -401,7 +440,7 @@ class FeedbackControllerTest extends TestCase
     private function hitUpdateAPI(array $payload, string|null $accessToken = null): TestResponse
     {
         return $this->putJson(
-            uri: \sprintf('/api/feedback/%s', $payload['identifier']),
+            uri: \sprintf('/api/feedbacks/%s', $payload['identifier']),
             data: $payload,
             headers: \is_null($accessToken) ? [] : ['Authorization' => "Bearer {$accessToken}"]
         );
@@ -413,7 +452,7 @@ class FeedbackControllerTest extends TestCase
     private function hitFindAPI(string $identifier, string|null $accessToken = null): TestResponse
     {
         return $this->getJson(
-            uri: \sprintf('/api/feedback/%s', $identifier),
+            uri: \sprintf('/api/feedbacks/%s', $identifier),
             headers: \is_null($accessToken) ? [] : ['Authorization' => "Bearer {$accessToken}"]
         );
     }
@@ -424,8 +463,23 @@ class FeedbackControllerTest extends TestCase
     private function hitListAPI(array $conditions = [], string|null $accessToken = null): TestResponse
     {
         return $this->getJson(
-            uri: \sprintf('/api/feedback?%s', \http_build_query($conditions)),
+            uri: \sprintf('/api/feedbacks?%s', \http_build_query($conditions)),
             headers: \is_null($accessToken) ? [] : ['Authorization' => "Bearer {$accessToken}"]
         );
+    }
+
+    /**
+     * 永続化内容を比較する.
+     */
+    private function assertPersisted(array $payload): void
+    {
+        $this->assertDatabaseHas('feedbacks', [
+            'identifier' => $payload['identifier'],
+            'type' => $payload['type'],
+            'status' => $payload['status'],
+            'content' => $payload['content'],
+            'created_at' => $payload['createdAt'],
+            'updated_at' => $payload['updatedAt'],
+        ]);
     }
 }

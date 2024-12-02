@@ -5,10 +5,10 @@ namespace App\Infrastructures\Feedback;
 use App\Domains\Feedback\Entities\Feedback as Entity;
 use App\Domains\Feedback\FeedbackRepository;
 use App\Domains\Feedback\ValueObjects\Criteria;
-use App\Domains\Feedback\ValueObjects\Criteria\Sort;
 use App\Domains\Feedback\ValueObjects\FeedbackIdentifier;
 use App\Domains\Feedback\ValueObjects\FeedbackStatus;
 use App\Domains\Feedback\ValueObjects\FeedbackType;
+use App\Infrastructures\Common\AbstractEloquentRepository;
 use App\Infrastructures\Feedback\Models\Feedback as Record;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,7 +17,7 @@ use Illuminate\Support\Enumerable;
 /**
  * フィードバックリポジトリ
  */
-class EloquentFeedbackRepository implements FeedbackRepository
+class EloquentFeedbackRepository extends AbstractEloquentRepository implements FeedbackRepository
 {
     /**
      * コンストラクタ.
@@ -31,20 +31,48 @@ class EloquentFeedbackRepository implements FeedbackRepository
     /**
      * {@inheritDoc}
      */
-    public function persist(Entity $feedback): void
+    public function add(Entity $feedback): void
     {
-        $this->createQuery()
-            ->updateOrCreate(
-                ['identifier' => $feedback->identifier()->value()],
-                [
-                    'identifier' => $feedback->identifier()->value(),
-                    'type' => $feedback->type()->name,
-                    'status' => $feedback->status()->name,
-                    'content' => $feedback->content(),
-                    'created_at' => $feedback->createdAt()->toAtomString(),
-                    'updated_at' => $feedback->updatedAt()->toAtomString(),
-                ]
-            );
+        try {
+            $this->createQuery()
+                ->create(
+                    [
+                        'identifier' => $feedback->identifier()->value(),
+                        'type' => $feedback->type()->name,
+                        'status' => $feedback->status()->name,
+                        'content' => $feedback->content(),
+                        'created_at' => $feedback->createdAt()->toAtomString(),
+                        'updated_at' => $feedback->updatedAt()->toAtomString(),
+                    ]
+                );
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception, $feedback->identifier()->value());
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function update(Entity $feedback): void
+    {
+        $target = $this->createQuery()
+            ->ofIdentifier($feedback->identifier())
+            ->first();
+
+        if (\is_null($target)) {
+            throw new \OutOfBoundsException(\sprintf('Feedback not found: %s', $feedback->identifier()->value()));
+        }
+
+        try {
+            $target->type = $feedback->type()->name;
+            $target->status = $feedback->status()->name;
+            $target->content = $feedback->content();
+            $target->updated_at = $feedback->updatedAt()->toAtomString();
+
+            $target->save();
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception, $feedback->identifier()->value());
+        }
     }
 
     /**
@@ -53,7 +81,7 @@ class EloquentFeedbackRepository implements FeedbackRepository
     public function find(FeedbackIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-            ->where('identifier', $identifier->value())
+            ->ofIdentifier($identifier)
             ->first();
 
         if (\is_null($record)) {
@@ -69,25 +97,7 @@ class EloquentFeedbackRepository implements FeedbackRepository
     public function list(Criteria $criteria): Enumerable
     {
         $records = $this->createQuery()
-            ->when(
-                !\is_null($criteria->type()),
-                fn (Builder $query): Builder => $query->where('type', $criteria->type()->name)
-            )
-            ->when(
-                !\is_null($criteria->status()),
-                fn (Builder $query): Builder => $query->where('status', $criteria->status()->name)
-            )
-            ->when(
-                !\is_null($criteria->sort()),
-                function (Builder $query) use ($criteria): Builder {
-                    return match ($criteria->sort()) {
-                        Sort::CREATED_AT_ASC => $query->orderBy('created_at', 'asc'),
-                        Sort::CREATED_AT_DESC => $query->orderBy('created_at', 'desc'),
-                        Sort::UPDATED_AT_ASC => $query->orderBy('updated_at', 'asc'),
-                        Sort::UPDATED_AT_DESC => $query->orderBy('updated_at', 'desc'),
-                    };
-                }
-            )
+            ->ofCriteria($criteria)
             ->get();
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));

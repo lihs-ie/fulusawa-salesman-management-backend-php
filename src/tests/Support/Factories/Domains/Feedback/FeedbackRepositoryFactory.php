@@ -7,6 +7,7 @@ use App\Domains\Feedback\Entities\Feedback;
 use App\Domains\Feedback\ValueObjects\Criteria;
 use App\Domains\Feedback\ValueObjects\Criteria\Sort;
 use App\Domains\Feedback\ValueObjects\FeedbackIdentifier;
+use App\Exceptions\ConflictException;
 use Closure;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuilder;
@@ -19,6 +20,8 @@ class FeedbackRepositoryFactory extends DependencyFactory
 {
     /**
      * {@inheritdoc}
+     *
+     * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
      */
     public function create(DependencyBuilder $builder, int $seed, array $overrides): FeedbackRepository
     {
@@ -43,9 +46,31 @@ class FeedbackRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function persist(Feedback $feedback): void
+            public function add(Feedback $feedback): void
             {
                 $key = $feedback->identifier()->value();
+
+                if ($this->instances->has($key)) {
+                    throw new ConflictException('Feedback already exists.');
+                }
+
+                $this->instances = clone $this->instances->put($key, $feedback);
+
+                if ($callback = $this->onPersist) {
+                    $callback($feedback);
+                }
+            }
+
+            /**
+             * {@inheritdoc}
+             */
+            public function update(Feedback $feedback): void
+            {
+                $key = $feedback->identifier()->value();
+
+                if (!$this->instances->has($key)) {
+                    throw new \OutOfBoundsException('Feedback not found.');
+                }
 
                 $this->instances = clone $this->instances->put($key, $feedback);
 
@@ -59,13 +84,11 @@ class FeedbackRepositoryFactory extends DependencyFactory
              */
             public function find(FeedbackIdentifier $identifier): Feedback
             {
-                $instance = $this->instances->first(
-                    fn (Feedback $feedback): bool => $feedback->identifier()->equals($identifier)
-                );
-
-                if ($instance === null) {
+                if (!$this->instances->has($identifier->value())) {
                     throw new \OutOfBoundsException('Feedback not found.');
                 }
+
+                $instance = $this->instances->get($identifier->value());
 
                 return $instance;
             }
@@ -87,14 +110,14 @@ class FeedbackRepositoryFactory extends DependencyFactory
                 $type = $criteria->type();
 
                 return $this->instances
-                  ->pipe($sort)
-                  ->when(!\is_null($status), fn (Enumerable $instances): Enumerable => $instances->filter(
-                      fn (Feedback $feedback): bool => $feedback->status() === $status
-                  ))
-                  ->when(!\is_null($type), fn (Enumerable $instances): Enumerable => $instances->filter(
-                      fn (Feedback $feedback): bool => $feedback->type() === $type
-                  ))
-                  ->values();
+                    ->pipe($sort)
+                    ->when(!\is_null($status), fn (Enumerable $instances): Enumerable => $instances->filter(
+                        fn (Feedback $feedback): bool => $feedback->status() === $status
+                    ))
+                    ->when(!\is_null($type), fn (Enumerable $instances): Enumerable => $instances->filter(
+                        fn (Feedback $feedback): bool => $feedback->type() === $type
+                    ))
+                    ->values();
             }
 
             /**
@@ -102,6 +125,10 @@ class FeedbackRepositoryFactory extends DependencyFactory
              */
             public function delete(FeedbackIdentifier $identifier): void
             {
+                if ($this->instances->has($identifier->value())) {
+                    throw new \OutOfBoundsException('Feedback not found.');
+                }
+
                 $removed = $this->instances->reject(
                     fn (Feedback $instance): bool => $instance->identifier()->equals($identifier)
                 );

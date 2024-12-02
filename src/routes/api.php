@@ -100,7 +100,7 @@ Route::prefix('daily-reports')
             });
     });
 
-Route::prefix('feedback')
+Route::prefix('feedbacks')
     ->controller(FeedbackController::class)
     ->group(function () use (&$sanctum): void {
         $sanctum(Role::USER, Role::ADMIN)
@@ -111,7 +111,7 @@ Route::prefix('feedback')
 
         $sanctum(Role::USER)
             ->group(function (): void {
-                Route::post('', 'create');
+                Route::post('', 'add');
             });
 
         $sanctum(Role::ADMIN)
