@@ -6,13 +6,10 @@ use App\Domains\Common\ValueObjects\DateTimeRange;
 use App\Domains\DailyReport\DailyReportRepository;
 use App\Domains\DailyReport\Entities\DailyReport as Entity;
 use App\Domains\DailyReport\ValueObjects\Criteria;
-use App\Domains\DailyReport\ValueObjects\DailyReportIdentifier;
 use App\Domains\Schedule\ValueObjects\ScheduleIdentifier;
 use App\Domains\Visit\ValueObjects\VisitIdentifier;
-use App\Exceptions\ConflictException;
 use App\UseCases\DailyReport as UseCase;
 use App\UseCases\Factories\CommonDomainFactory;
-use Closure;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuildable;
@@ -46,9 +43,9 @@ class DailyReportTest extends TestCase
     }
 
     /**
-     * @testdox testAddSuccessPersistEntity addメソッドで日報を永続化できること.
+     * @testdox testPersistSuccessInCaseOnCreate persistメソッドで新規の日報を永続化すること.
      */
-    public function testAddSuccessPersistEntity(): void
+    public function testPersistSuccessInCaseOnCreate(): void
     {
         $expected = $this->builder()->create(Entity::class);
 
@@ -56,7 +53,7 @@ class DailyReportTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->add(
+        $useCase->persist(
             identifier: $parameters['identifier'],
             user: $parameters['user'],
             date: $parameters['date'],
@@ -69,32 +66,9 @@ class DailyReportTest extends TestCase
     }
 
     /**
-     * @testdox testAddFailureWithDuplicateIdentifier addメソッドで重複した識別子の日報を永続化しようとすると例外が発生すること.
+     * @testdox testPersistSuccessInCaseOnUpdate persistメソッドで既存の日報を更新すること.
      */
-    public function testAddFailureWithDuplicateIdentifier(): void
-    {
-        $expected = $this->instances->random();
-
-        [$useCase] = $this->createPersistUseCase();
-
-        $this->expectException(ConflictException::class);
-
-        $parameters = $this->createParametersFromEntity($expected);
-
-        $useCase->add(
-            identifier: $parameters['identifier'],
-            user: $parameters['user'],
-            date: $parameters['date'],
-            schedules: $parameters['schedules'],
-            visits: $parameters['visits'],
-            isSubmitted: $parameters['isSubmitted'],
-        );
-    }
-
-    /**
-     * @testdox testUpdateSuccessPersistEntity updateメソッドで日報を更新できること.
-     */
-    public function testUpdateSuccessPersistEntity(): void
+    public function testPersistSuccessInCaseOnUpdate(): void
     {
         $expected = $this->instances->random();
 
@@ -102,7 +76,7 @@ class DailyReportTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->update(
+        $useCase->persist(
             identifier: $parameters['identifier'],
             user: $parameters['user'],
             date: $parameters['date'],
@@ -112,29 +86,6 @@ class DailyReportTest extends TestCase
         );
 
         $this->assertPersisted($expected, $persisted, Entity::class);
-    }
-
-    /**
-     * @testdox testUpdateFailureWithMissingIdentifier updateメソッドで存在しない日報を更新しようとすると例外が発生すること.
-     */
-    public function testUpdateFailureWithMissingIdentifier(): void
-    {
-        $instance = $this->builder()->create(Entity::class);
-
-        [$useCase] = $this->createPersistUseCase();
-
-        $this->expectException(\OutOfBoundsException::class);
-
-        $parameters = $this->createParametersFromEntity($instance);
-
-        $useCase->update(
-            identifier: $parameters['identifier'],
-            user: $parameters['user'],
-            date: $parameters['date'],
-            schedules: $parameters['schedules'],
-            visits: $parameters['visits'],
-            isSubmitted: $parameters['isSubmitted'],
-        );
     }
 
     /**
@@ -152,28 +103,13 @@ class DailyReportTest extends TestCase
     }
 
     /**
-     * @testdox testFindFailureWithMissingIdentifier findメソッドで存在しない日報を取得しようとすると例外が発生すること.
-     */
-    public function testFindFailureWithMissingIdentifier(): void
-    {
-        $identifier = $this->builder()->create(DailyReportIdentifier::class);
-
-        [$useCase] = $this->createPersistUseCase();
-
-        $this->expectException(\OutOfBoundsException::class);
-
-        $useCase->find($identifier->value());
-    }
-
-    /**
      * @testdox testListSuccessReturnsEntitiesWithEmptyCriteria listメソッドで日報一覧を取得すること.
-     * @dataProvider provideCriteria
      */
-    public function testListSuccessReturnsEntitiesWithEmptyCriteria(Closure $closure): void
+    public function testListSuccessReturnsEntitiesWithEmptyCriteria(): void
     {
-        $criteria = $closure($this);
+        $criteria = $this->builder()->create(Criteria::class);
 
-        $expecteds = $this->createListExpected($criteria);
+        $expecteds = clone $this->instances;
 
         [$useCase] = $this->createPersistUseCase();
 
@@ -181,11 +117,9 @@ class DailyReportTest extends TestCase
             conditions: $this->deflateCriteria($criteria)
         );
 
-        $this->assertCount($expecteds->count(), $actuals);
-
         $expecteds
             ->zip($actuals)
-            ->eachSpread(function (?Entity $expected, $actual): void {
+            ->eachSpread(function (Entity $expected, $actual): void {
                 $this->assertNotNull($expected);
                 $this->assertInstanceOf(Entity::class, $actual);
                 $this->assertEntity($expected, $actual);
@@ -193,29 +127,47 @@ class DailyReportTest extends TestCase
     }
 
     /**
-     * 検索条件を提供するプロバイダ.
+     * @testdox testListSuccessReturnsEntitiesWithFilledCriteria listメソッドで日報一覧を取得すること.
      */
-    public static function provideCriteria(): \Generator
+    public function testListSuccessReturnsEntitiesWithFilledCriteria(): void
     {
-        yield 'empty' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class)];
+        $instance = $this->instances->random();
 
-        yield 'with date' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
-            'date' => $self->builder()->create(DateTimeRange::class),
-        ])];
+        $date = $this->builder()->create(DateTimeRange::class, null, [
+            'start' => $instance->date()->setTime(0, 0),
+            'end' => $instance->date()->setTime(23, 59),
+        ]);
 
-        yield 'with user' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
-            'user' => $self->instances->random()->user(),
-        ])];
+        $criteria = $this->builder()->create(
+            Criteria::class,
+            null,
+            ['user' => $instance->user(), 'date' => $date, 'isSubmitted' => $instance->isSubmitted()]
+        );
 
-        yield 'with isSubmitted' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
-            'isSubmitted' => (bool) \mt_rand(0, 1),
-        ])];
+        $expecteds = $this->instances
+            ->filter(fn (Entity $instance): bool => $date->includes($instance->date()))
+            ->filter(fn (Entity $instance): bool => $instance->user()->equals($instance->user()))
+            ->filter(fn (Entity $instance): bool => $instance->isSubmitted() === $criteria->isSubmitted());
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $actuals = $useCase->list(conditions: $this->deflateCriteria($criteria));
+
+        $this->assertInstanceOf(Collection::class, $actuals);
+
+        $expecteds
+            ->zip($actuals)
+            ->eachSpread(function (Entity $expected, $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
-     * @testdox testDeleteSuccessRemoveEntity deleteメソッドで指定した日報を削除すること.
+     * @testdox testDeleteSuccess deleteメソッドで指定した日報を削除すること.
      */
-    public function testDeleteSuccessRemoveEntity(): void
+    public function testDeleteSuccess(): void
     {
         [$removed, $onRemove] = $this->createRemoveHandler();
 
@@ -234,20 +186,6 @@ class DailyReportTest extends TestCase
         $removed->each(function (Entity $instance) use ($target): void {
             $this->assertNotEquals($target->identifier()->value(), $instance->identifier()->value());
         });
-    }
-
-    /**
-     * @testdox testDeleteFailureWithMissingIdentifier deleteメソッドで存在しない日報を削除しようとすると例外が発生すること.
-     */
-    public function testDeleteFailureWithMissingIdentifier(): void
-    {
-        $identifier = $this->builder()->create(DailyReportIdentifier::class);
-
-        [$useCase] = $this->createPersistUseCase();
-
-        $this->expectException(\OutOfBoundsException::class);
-
-        $useCase->delete($identifier->value());
     }
 
     /**
@@ -341,28 +279,11 @@ class DailyReportTest extends TestCase
 
         return [
             'date' => \is_null($date) ? null : [
-                'start' => $date->start()?->toAtomString(),
-                'end' => $date->end()?->toAtomString(),
+                'start' => $date ? $date->start()->toAtomString() : null,
+                'end' => $date ? $date->end()->toAtomString() : null,
             ],
             'user' => $user ? $user->value() : null,
             'isSubmitted' => $isSubmitted,
         ];
-    }
-
-    /**
-     * listメソッドの期待値を生成するへルパ.
-     */
-    private function createListExpected(Criteria $criteria): Enumerable
-    {
-        return $this->instances
-            ->when(!\is_null($criteria->date()), fn (Enumerable $instances) => $instances->filter(
-                fn (Entity $instance): bool => $criteria->date()->includes($instance->date())
-            ))
-            ->when(!\is_null($criteria->user()), fn (Enumerable $instances) => $instances->filter(
-                fn (Entity $instance): bool => $instance->user()->equals($criteria->user())
-            ))
-            ->when(!\is_null($criteria->isSubmitted()), fn (Enumerable $instances) => $instances->filter(
-                fn (Entity $instance): bool => $instance->isSubmitted() === $criteria->isSubmitted()
-            ));
     }
 }

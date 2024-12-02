@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Http\Requests\API\DailyReport;
 
-use App\Http\Requests\API\DailyReport\UpdateRequest;
+use App\Http\Requests\API\DailyReport\PersistRequest;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Ramsey\Uuid\Uuid;
@@ -17,7 +17,7 @@ use Tests\Unit\Http\Requests\API\CommandRequestTest;
  *
  * @coversNothing
  */
-class UpdateRequestTest extends TestCase
+class PersistRequestTest extends TestCase
 {
     use CommandRequestTest;
 
@@ -26,7 +26,7 @@ class UpdateRequestTest extends TestCase
      */
     protected function target(): string
     {
-        return UpdateRequest::class;
+        return PersistRequest::class;
     }
 
     /**
@@ -35,6 +35,7 @@ class UpdateRequestTest extends TestCase
     protected function createDefaultPayload(): array
     {
         return [
+          'identifier' => Uuid::uuid7()->toString(),
           'user' => Uuid::uuid7()->toString(),
           'date' => CarbonImmutable::now()->toAtomString(),
           'schedules' => Collection::times(\mt_rand(1, 5), fn (): string => Uuid::uuid7()->toString())
@@ -50,9 +51,7 @@ class UpdateRequestTest extends TestCase
      */
     protected function createDefaultRoute(): array
     {
-        return [
-          'identifier' => Uuid::uuid7()->toString(),
-        ];
+        return [];
     }
 
     /**
@@ -79,6 +78,12 @@ class UpdateRequestTest extends TestCase
     protected function getInvalidPayloadPatterns(): array
     {
         return [
+          'identifier' => [
+            'invalid type' => \mt_rand(1, 255),
+            'invalid format' => 'invalid',
+            'null' => null,
+            'empty' => '',
+          ],
           'user' => [
             'invalid type' => \mt_rand(1, 255),
             'invalid format' => 'invalid',
@@ -136,13 +141,6 @@ class UpdateRequestTest extends TestCase
      */
     protected function getInvalidRoutePatterns(): array
     {
-        return [
-          'identifier' => [
-            'invalid type' => \mt_rand(1, 255),
-            'invalid format' => 'invalid',
-            'null' => null,
-            'empty' => '',
-          ],
-        ];
+        return [];
     }
 }

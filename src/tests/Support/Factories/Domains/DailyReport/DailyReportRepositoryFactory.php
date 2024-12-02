@@ -6,7 +6,6 @@ use App\Domains\DailyReport\DailyReportRepository;
 use App\Domains\DailyReport\Entities\DailyReport;
 use App\Domains\DailyReport\ValueObjects\Criteria;
 use App\Domains\DailyReport\ValueObjects\DailyReportIdentifier;
-use App\Exceptions\ConflictException;
 use Closure;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuilder;
@@ -19,8 +18,6 @@ class DailyReportRepositoryFactory extends DependencyFactory
 {
     /**
      * {@inheritdoc}
-     *
-     * @suppressWarnings(PHPMD.ExcessiveMethodLength)
      */
     public function create(DependencyBuilder $builder, int $seed, array $overrides): DailyReportRepository
     {
@@ -45,31 +42,9 @@ class DailyReportRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function add(DailyReport $dailyReport): void
+            public function persist(DailyReport $dailyReport): void
             {
                 $key = $dailyReport->identifier()->value();
-
-                if ($this->instances->has($key)) {
-                    throw new ConflictException('DailyReport already exists.');
-                }
-
-                $this->instances = clone $this->instances->put($key, $dailyReport);
-
-                if ($callback = $this->onPersist) {
-                    $callback($dailyReport);
-                }
-            }
-
-            /**
-             * {@inheritdoc}
-             */
-            public function update(DailyReport $dailyReport): void
-            {
-                $key = $dailyReport->identifier()->value();
-
-                if (!$this->instances->has($key)) {
-                    throw new \OutOfBoundsException('DailyReport not found.');
-                }
 
                 $this->instances = clone $this->instances->put($key, $dailyReport);
 
@@ -104,15 +79,15 @@ class DailyReportRepositoryFactory extends DependencyFactory
                 $isSubmitted = $criteria->isSubmitted();
 
                 return $this->instances
-                    ->when(!\is_null($date), fn (Enumerable $instances) => $instances->filter(
-                        fn (DailyReport $instance): bool => $date->includes($instance->date())
-                    ))
-                    ->when(!\is_null($user), fn (Enumerable $instances) => $instances->filter(
-                        fn (DailyReport $instance): bool => $instance->user()->equals($user)
-                    ))
-                    ->when(!\is_null($isSubmitted), fn (Enumerable $instances) => $instances->filter(
-                        fn (DailyReport $instance): bool => $instance->isSubmitted() === $isSubmitted
-                    ));
+                  ->when(!\is_null($date), fn (Enumerable $instances) => $instances->filter(
+                      fn (DailyReport $instance): bool => $date->includes($instance->date())
+                  ))
+                  ->when(!\is_null($user), fn (Enumerable $instances) => $instances->filter(
+                      fn (DailyReport $instance): bool => $instance->user()->equals($user)
+                  ))
+                  ->when(!\is_null($isSubmitted), fn (Enumerable $instances) => $instances->filter(
+                      fn (DailyReport $instance): bool => $instance->isSubmitted() === $isSubmitted
+                  ));
             }
 
             /**
@@ -120,10 +95,6 @@ class DailyReportRepositoryFactory extends DependencyFactory
              */
             public function delete(DailyReportIdentifier $identifier): void
             {
-                if (!$this->instances->has($identifier->value())) {
-                    throw new \OutOfBoundsException('DailyReport not found.');
-                }
-
                 $removed = $this->instances->reject(
                     fn (DailyReport $instance): bool => $instance->identifier()->equals($identifier)
                 );
