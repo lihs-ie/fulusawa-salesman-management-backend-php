@@ -21,6 +21,9 @@ class DailyReport
 {
     use CommonDomainFactory;
 
+    /**
+     * コンストラクタ.
+     */
     public function __construct(
         private readonly DailyReportRepository $repository,
     ) {
@@ -37,7 +40,7 @@ class DailyReport
      * @param bool $isSubmitted
      * @return void
      */
-    public function persist(
+    public function add(
         string $identifier,
         string $user,
         string $date,
@@ -54,7 +57,38 @@ class DailyReport
             isSubmitted: $isSubmitted,
         );
 
-        $this->repository->persist($entity);
+        $this->repository->add($entity);
+    }
+
+    /**
+     * 日報を更新する
+     *
+     * @param string $identifier
+     * @param string $user
+     * @param string $date
+     * @param array $schedules
+     * @param array $visits
+     * @param bool $isSubmitted
+     * @return void
+     */
+    public function update(
+        string $identifier,
+        string $user,
+        string $date,
+        array $schedules,
+        array $visits,
+        bool $isSubmitted = false,
+    ): void {
+        $entity = new Entity(
+            identifier: new DailyReportIdentifier($identifier),
+            user: new UserIdentifier($user),
+            date: CarbonImmutable::parse($date),
+            schedules: $this->extractSchedules($schedules),
+            visits: $this->extractVisits($visits),
+            isSubmitted: $isSubmitted,
+        );
+
+        $this->repository->update($entity);
     }
 
     /**
@@ -72,7 +106,7 @@ class DailyReport
      * 日報一覧を指定した条件で取得する
      *
      * @param array $conditions
-     * @return Enumerable
+     * @return Enumerable<DailyReport>
      */
     public function list(array $conditions): Enumerable
     {

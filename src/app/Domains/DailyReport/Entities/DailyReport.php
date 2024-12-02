@@ -17,7 +17,7 @@ class DailyReport
     public function __construct(
         public readonly DailyReportIdentifier $identifier,
         public readonly UserIdentifier $user,
-        public readonly \DateTimeImmutable $date,
+        public readonly \DateTimeInterface $date,
         public readonly Enumerable $schedules,
         public readonly Enumerable $visits,
         public readonly bool $isSubmitted,
@@ -49,7 +49,7 @@ class DailyReport
         return $this->user;
     }
 
-    public function date(): \DateTimeImmutable
+    public function date(): \DateTimeInterface
     {
         return $this->date;
     }

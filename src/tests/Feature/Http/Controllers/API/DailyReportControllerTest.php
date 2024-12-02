@@ -21,7 +21,9 @@ use Tests\TestCase;
  * @group api
  * @group dailyreport
  *
- * @covers \App\Http\Controllers\API\DailyReportController
+ * @coversNothing
+ *
+ * @SuppressWarnings(PHPMD.TooManyMethods)
  */
 class DailyReportControllerTest extends TestCase
 {
@@ -55,9 +57,9 @@ class DailyReportControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateSuccessReturnsSuccessResponse createメソッドで日報を新規作成できること.
+     * @testdox testAddSuccessReturnsSuccessResponse 日報追加APIに日報を新規作成できること.
      */
-    public function testCreateSuccessReturnsSuccessResponse(): void
+    public function testAddSuccessReturnsSuccessResponse(): void
     {
         $record = $this->records->random();
 
@@ -73,27 +75,18 @@ class DailyReportControllerTest extends TestCase
         ];
 
         $response = $this->callAPIWithAuthentication(
-            fn (string $accessToken): TestResponse => $this->hitCreateAPI($payload, $accessToken),
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
             Role::USER
         );
 
-        $response->assertSuccessful();
-        $response->assertStatus(201);
-
-        $this->assertDatabaseHas('daily_reports', [
-          'identifier' => $payload['identifier'],
-          'user' => $payload['user'],
-          'date' => $payload['date'],
-          'schedules' => \json_encode($payload['schedules']),
-          'visits' => \json_encode($payload['visits']),
-          'is_submitted' => $payload['isSubmitted']
-        ]);
+        $response->assertCreated();
+        $this->assertPersisted($payload);
     }
 
     /**
-     * @testdox testCreateReturnsForbiddenWithRoleOfAdmin createメソッドで管理者権限でリクエストするとForbiddenが返ること.
+     * @testdox testAddReturnsForbiddenWithRoleOfAdmin 日報追加APIに管理者権限でリクエストするとForbiddenが返ること.
      */
-    public function testCreateReturnsForbiddenWithRoleOfAdmin(): void
+    public function testAddReturnsForbiddenWithRoleOfAdmin(): void
     {
         $record = $this->records->random();
 
@@ -109,7 +102,7 @@ class DailyReportControllerTest extends TestCase
         ];
 
         $response = $this->callAPIWithAuthentication(
-            fn (string $accessToken): TestResponse => $this->hitCreateAPI($payload, $accessToken),
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
             Role::ADMIN
         );
 
@@ -117,9 +110,9 @@ class DailyReportControllerTest extends TestCase
     }
 
     /**
-     * @testdox testCreateReturnsUnauthorizedWithoutAuthentication createメソッドで認証なしでリクエストするとBadRequestが返ること.
+     * @testdox testAddReturnsUnauthorizedWithoutAuthentication 日報追加APIに未認証でリクエストするとBadRequestが返ること.
      */
-    public function testCreateReturnsUnauthorizedWithoutAuthentication(): void
+    public function testAddReturnsUnauthorizedWithoutAuthentication(): void
     {
         $record = $this->records->random();
 
@@ -134,9 +127,35 @@ class DailyReportControllerTest extends TestCase
           'isSubmitted' => (bool) \mt_rand(0, 1)
         ];
 
-        $response = $this->hitCreateAPI($payload);
+        $response = $this->hitAddAPI($payload);
 
         $response->assertUnauthorized();
+    }
+
+    /**
+     * @testdox testAddReturnsConflictWithExistingIdentifier 日報追加APIで既存のidentifierを指定するとConflictが返ること.
+     */
+    public function testAddReturnsConflictWithExistingIdentifier(): void
+    {
+        $record = $this->records->random();
+
+        $payload = [
+          'identifier' => $record->identifier,
+          'user' => $record->user,
+          'date' => CarbonImmutable::now()->toDateString(),
+          'schedules' => Collection::times(\mt_rand(1, 3), fn (): string => Uuid::uuid7()->toString())
+            ->all(),
+          'visits' => Collection::times(\mt_rand(1, 3), fn (): string => Uuid::uuid7()->toString())
+            ->all(),
+          'isSubmitted' => (bool) \mt_rand(0, 1)
+        ];
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
+            Role::USER
+        );
+
+        $response->assertConflict();
     }
 
     /**
@@ -180,7 +199,25 @@ class DailyReportControllerTest extends TestCase
      */
     public function testUpdateReturnsNotFoundWithMissingIdentifier(): void
     {
-        $this->markTestSkipped('infrastructure層のcreateとupdateを分けて実装後に実装');
+        $record = $this->records->random();
+
+        $payload = [
+          'identifier' => Uuid::uuid7()->toString(),
+          'user' => $record->user,
+          'date' => CarbonImmutable::now()->toDateString(),
+          'schedules' => Collection::times(\mt_rand(1, 3), fn (): string => Uuid::uuid7()->toString())
+            ->all(),
+          'visits' => Collection::times(\mt_rand(1, 3), fn (): string => Uuid::uuid7()->toString())
+            ->all(),
+          'isSubmitted' => (bool) \mt_rand(0, 1)
+        ];
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($payload, $accessToken),
+            Role::USER
+        );
+
+        $response->assertNotFound();
     }
 
     /**
@@ -239,14 +276,14 @@ class DailyReportControllerTest extends TestCase
     {
         $record = $this->records->random();
 
-        $expected = ['dailyReport' => [
+        $expected = [
           'identifier' => $record->identifier,
           'user' => $record->user,
           'date' => CarbonImmutable::parse($record->date)->toAtomString(),
           'schedules' => \json_decode($record->schedules),
           'visits' => \json_decode($record->visits),
           'isSubmitted' => $record->is_submitted
-        ]];
+        ];
 
         $response = $this->callAPIWithAuthentication(
             fn (string $accessToken): TestResponse => $this->hitFindAPI($record->identifier, $accessToken),
@@ -413,9 +450,9 @@ class DailyReportControllerTest extends TestCase
     }
 
     /**
-     * 日報作成APIを実行する.
+     * 日報追加APIを実行する.
      */
-    private function hitCreateAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitAddAPI(array $payload, string|null $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'POST',
@@ -472,5 +509,20 @@ class DailyReportControllerTest extends TestCase
             uri: \sprintf('/api/daily-reports/%s', $identifier),
             headers: \is_null($accessToken) ? [] : ['Authorization' => "Bearer {$accessToken}"]
         );
+    }
+
+    /**
+     * 永続化内容を比較する.
+     */
+    private function assertPersisted(array $payload): void
+    {
+        $this->assertDatabaseHas('daily_reports', [
+          'identifier' => $payload['identifier'],
+          'user' => $payload['user'],
+          'date' => $payload['date'],
+          'schedules' => \json_encode($payload['schedules']),
+          'visits' => \json_encode($payload['visits']),
+          'is_submitted' => $payload['isSubmitted']
+        ]);
     }
 }
