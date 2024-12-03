@@ -3,13 +3,17 @@
 namespace Tests\Unit\UseCases;
 
 use App\Domains\Feedback\Entities\Feedback as Entity;
+use App\Domains\Feedback\Entities\Feedback;
 use App\Domains\Feedback\FeedbackRepository;
 use App\Domains\Feedback\ValueObjects\Criteria;
 use App\Domains\Feedback\ValueObjects\Criteria\Sort;
 use App\Domains\Feedback\ValueObjects\FeedbackStatus;
 use App\Domains\Feedback\ValueObjects\FeedbackType;
+use App\Exceptions\ConflictException;
 use App\UseCases\Factories\CommonDomainFactory;
 use App\UseCases\Feedback as UseCase;
+use Closure;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuildable;
 use Tests\TestCase;
@@ -42,9 +46,9 @@ class FeedbackTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnCreate persistメソッドで新規のフィードバックを永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドで新規のフィードバックを永続化できること.
      */
-    public function testPersistSuccessInCaseOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $expected = $this->builder()->create(Entity::class);
 
@@ -52,7 +56,7 @@ class FeedbackTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->add(
             identifier: $parameters['identifier'],
             type: $parameters['type'],
             status: $parameters['status'],
@@ -65,9 +69,34 @@ class FeedbackTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnUpdate persistメソッドで既存のフィードバックを上書きして永続化できること.
+     * @testdox testAddFailureWithDuplicateIdentifier addメソッドで重複する識別子のフィードバックを永続化しようとすると例外が発生すること.
      */
-    public function testPersistSuccessInCaseOnUpdate(): void
+    public function testAddFailureWithDuplicateIdentifier(): void
+    {
+        $target = $this->instances->random();
+
+        $expected = $this->builder()->create(Entity::class, null, ['identifier' => $target->identifier()]);
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($expected);
+
+        $this->expectException(ConflictException::class);
+
+        $useCase->add(
+            identifier: $parameters['identifier'],
+            type: $parameters['type'],
+            status: $parameters['status'],
+            content: $parameters['content'],
+            createdAt: $parameters['createdAt'],
+            updatedAt: $parameters['updatedAt'],
+        );
+    }
+
+    /**
+     * @testdox testUpdateSuccessPersistEntity updateメソッドで既存のフィードバックを上書きして永続化できること.
+     */
+    public function testUpdateSuccessPersistEntity(): void
     {
         $target = $this->instances->random();
 
@@ -77,7 +106,7 @@ class FeedbackTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->update(
             identifier: $parameters['identifier'],
             type: $parameters['type'],
             status: $parameters['status'],
@@ -87,6 +116,29 @@ class FeedbackTest extends TestCase
         );
 
         $this->assertPersisted($expected, $persisted, Entity::class);
+    }
+
+    /**
+     * @testdox testUpdateFailureWithMissingIdentifier updateメソッドで存在しないフィードバックを更新しようとすると例外が発生すること.
+     */
+    public function testUpdateFailureWithMissingIdentifier(): void
+    {
+        $expected = $this->builder()->create(Entity::class);
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($expected);
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $useCase->update(
+            identifier: $parameters['identifier'],
+            type: $parameters['type'],
+            status: $parameters['status'],
+            content: $parameters['content'],
+            createdAt: $parameters['createdAt'],
+            updatedAt: $parameters['updatedAt'],
+        );
     }
 
     /**
@@ -104,15 +156,35 @@ class FeedbackTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccessReturnsEntitiesWithEmptyCriteria listメソッドでフィードバック一覧を取得できること.
+     * @testdox testFindFailureWithMissingIdentifier findメソッドで存在しないフィードバックを取得しようとすると例外が発生すること.
      */
-    public function testListSuccessReturnsEntitiesWithEmptyCriteria(): void
+    public function testFindFailureWithMissingIdentifier(): void
     {
-        $expecteds = clone $this->instances;
+        $expected = $this->builder()->create(Entity::class);
 
         [$useCase] = $this->createPersistUseCase();
 
-        $actuals = $useCase->list([]);
+        $this->expectException(\OutOfBoundsException::class);
+
+        $useCase->find($expected->identifier()->value());
+    }
+
+    /**
+     * @testdox testListSuccessReturnsEntitiesWithEmptyCriteria listメソッドでフィードバック一覧を取得できること.
+     *
+     * @dataProvider provideCriteria
+     */
+    public function testListSuccessReturnsEntities(Closure $closure): void
+    {
+        $criteria = $closure($this);
+
+        $expecteds = $this->createListExpected($criteria);
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $actuals = $useCase->list($this->deflateCriteria($criteria));
+
+        $this->assertCount($expecteds->count(), $actuals);
 
         $expecteds
             ->zip($actuals)
@@ -124,36 +196,23 @@ class FeedbackTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccessReturnsEntitiesWithFilledCriteria listメソッドでフィードバック一覧を取得できること.
+     * 検索条件を提供するプロバイダ.
      */
-    public function testListSuccessReturnsEntitiesWithFilledCriteria(): void
+    public static function provideCriteria(): \Generator
     {
-        $criteria = $this->builder()->create(Criteria::class, null, ['fill' => true, 'sort' => Sort::CREATED_AT_ASC]);
+        yield 'empty' => [fn (self $self) => $self->builder()->create(Criteria::class)];
 
-        $sort = fn (Enumerable $instances) => match ($criteria->sort()) {
-            Sort::CREATED_AT_ASC => $instances->sortBy(fn (Entity $instance): \DateTimeInterface => ($instance->createdAt())),
-            Sort::CREATED_AT_DESC => $instances->sortByDesc(fn (Entity $instance): \DateTimeInterface => ($instance->createdAt())),
-            Sort::UPDATED_AT_ASC => $instances->sortBy(fn (Entity $instance): \DateTimeInterface => ($instance->updatedAt())),
-            Sort::UPDATED_AT_DESC => $instances->sortByDesc(fn (Entity $instance): \DateTimeInterface => ($instance->updatedAt())),
-        };
+        yield 'status' => [fn (self $self) => $self->builder()->create(Criteria::class, null, [
+            'status' => Collection::make(FeedbackStatus::cases())->random(),
+        ])];
 
-        $expecteds = $this->instances
-            ->filter(fn (Entity $instance): bool => $instance->status() === $criteria->status())
-            ->filter(fn (Entity $instance): bool => $instance->type() === $criteria->type())
-            ->pipe($sort)
-            ->values();
+        yield 'type' => [fn (self $self) => $self->builder()->create(Criteria::class, null, [
+            'type' => Collection::make(FeedbackType::cases())->random(),
+        ])];
 
-        [$useCase] = $this->createPersistUseCase();
-
-        $actuals = $useCase->list($this->deflateCriteria($criteria));
-
-        $expecteds
-            ->zip($actuals)
-            ->eachSpread(function (Entity $expected, $actual): void {
-                $this->assertNotNull($expected);
-                $this->assertInstanceOf(Entity::class, $actual);
-                $this->assertEntity($expected, $actual);
-            });
+        yield 'sort' => [fn (self $self) => $self->builder()->create(Criteria::class, null, [
+            'sort' => Collection::make(Sort::cases())->random(),
+        ])];
     }
 
     /**
@@ -215,22 +274,45 @@ class FeedbackTest extends TestCase
     }
 
     /**
-     * エンティティからpersistメソッドに使用するパラメータを生成するへルパ.
+     * listメソッドの期待値を生成するへルパ.
+     */
+    private function createListExpected(Criteria $criteria): Enumerable
+    {
+        return $this->instances
+            ->when(!\is_null($criteria->status()), fn (Enumerable $instances): Enumerable => $instances->filter(
+                fn (Entity $instance): bool => $instance->status() === $criteria->status()
+            ))
+            ->when(!\is_null($criteria->type()), fn (Enumerable $instances): Enumerable => $instances->filter(
+                fn (Entity $instance): bool => $instance->type() === $criteria->type()
+            ))
+            ->when(!\is_null($criteria->sort()), fn (Enumerable $instances): Enumerable =>
+            $instances->pipe(fn (Enumerable $instances): Enumerable => match ($criteria->sort()) {
+                Sort::CREATED_AT_DESC => $instances->sortByDesc(fn (Entity $instance): \DateTimeInterface => ($instance->createdAt())),
+                Sort::CREATED_AT_ASC => $instances->sortBy(fn (Entity $instance): \DateTimeInterface => ($instance->createdAt())),
+                Sort::UPDATED_AT_DESC => $instances->sortByDesc(fn (Entity $instance): \DateTimeInterface => ($instance->createdAt())),
+                Sort::UPDATED_AT_ASC => $instances->sortBy(fn (Entity $instance): \DateTimeInterface => ($instance->updatedAt())),
+                null => $instances
+            }))
+            ->values();
+    }
+
+    /**
+     * エンティティからaddメソッドに使用するパラメータを生成するへルパ.
      */
     private function createParametersFromEntity(Entity $entity): array
     {
         $type = match ($entity->type()) {
-            FeedbackType::IMPROVEMENT => '1',
-            FeedbackType::PROBLEM => '2',
-            FeedbackType::QUESTION => '3',
-            FeedbackType::OTHER => '4',
+            FeedbackType::IMPROVEMENT => FeedbackType::IMPROVEMENT->name,
+            FeedbackType::PROBLEM => FeedbackType::PROBLEM->name,
+            FeedbackType::QUESTION => FeedbackType::QUESTION->name,
+            FeedbackType::OTHER => FeedbackType::OTHER->name,
         };
 
         $status = match ($entity->status()) {
-            FeedbackStatus::WAITING => '1',
-            FeedbackStatus::IN_PROGRESS => '2',
-            FeedbackStatus::COMPLETED => '3',
-            FeedbackStatus::NOT_NECESSARY => '4',
+            FeedbackStatus::WAITING => FeedbackStatus::WAITING->name,
+            FeedbackStatus::IN_PROGRESS => FeedbackStatus::IN_PROGRESS->name,
+            FeedbackStatus::COMPLETED => FeedbackStatus::COMPLETED->name,
+            FeedbackStatus::NOT_NECESSARY => FeedbackStatus::NOT_NECESSARY->name,
         };
 
         return [
@@ -249,26 +331,26 @@ class FeedbackTest extends TestCase
     private function deflateCriteria(Criteria $criteria): array
     {
         $status = match ($criteria->status()) {
-            FeedbackStatus::WAITING => '1',
-            FeedbackStatus::IN_PROGRESS => '2',
-            FeedbackStatus::COMPLETED => '3',
-            FeedbackStatus::NOT_NECESSARY => '4',
+            FeedbackStatus::WAITING => FeedbackStatus::WAITING->name,
+            FeedbackStatus::IN_PROGRESS => FeedbackStatus::IN_PROGRESS->name,
+            FeedbackStatus::COMPLETED => FeedbackStatus::COMPLETED->name,
+            FeedbackStatus::NOT_NECESSARY => FeedbackStatus::NOT_NECESSARY->name,
             null => null,
         };
 
         $type = match ($criteria->type()) {
-            FeedbackType::IMPROVEMENT => '1',
-            FeedbackType::PROBLEM => '2',
-            FeedbackType::QUESTION => '3',
-            FeedbackType::OTHER => '4',
+            FeedbackType::IMPROVEMENT => FeedbackType::IMPROVEMENT->name,
+            FeedbackType::PROBLEM => FeedbackType::PROBLEM->name,
+            FeedbackType::QUESTION => FeedbackType::QUESTION->name,
+            FeedbackType::OTHER => FeedbackType::OTHER->name,
             null => null,
         };
 
         $sort = match ($criteria->sort()) {
-            Sort::CREATED_AT_DESC => '1',
-            Sort::CREATED_AT_ASC => '2',
-            Sort::UPDATED_AT_DESC => '3',
-            Sort::UPDATED_AT_ASC => '4',
+            Sort::CREATED_AT_DESC => Sort::CREATED_AT_DESC->name,
+            Sort::CREATED_AT_ASC => Sort::CREATED_AT_ASC->name,
+            Sort::UPDATED_AT_DESC => Sort::UPDATED_AT_DESC->name,
+            Sort::UPDATED_AT_ASC => Sort::UPDATED_AT_ASC->name,
             null => null,
         };
 

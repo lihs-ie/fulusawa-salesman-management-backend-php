@@ -16,8 +16,8 @@ class FeedbackEncoder
     {
         return [
           'identifier' => $feedback->identifier()->value(),
-          'status' => $feedback->status()->name,
           'type' => $feedback->type()->name,
+          'status' => $feedback->status()->name,
           'content' => $feedback->content(),
           'createdAt' => $feedback->createdAt()->toAtomString(),
           'updatedAt' => $feedback->updatedAt()->toAtomString(),

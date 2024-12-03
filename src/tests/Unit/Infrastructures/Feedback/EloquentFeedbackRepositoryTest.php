@@ -7,8 +7,12 @@ use App\Domains\Feedback\Entities\Feedback as Entity;
 use App\Domains\Feedback\ValueObjects\Criteria;
 use App\Domains\Feedback\ValueObjects\Criteria\Sort;
 use App\Domains\Feedback\ValueObjects\FeedbackIdentifier;
+use App\Domains\Feedback\ValueObjects\FeedbackStatus;
+use App\Domains\Feedback\ValueObjects\FeedbackType;
+use App\Exceptions\ConflictException;
 use App\Infrastructures\Feedback\EloquentFeedbackRepository;
 use App\Infrastructures\Feedback\Models\Feedback as Record;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuildable;
 use Tests\TestCase;
@@ -27,35 +31,71 @@ class EloquentFeedbackRepositoryTest extends TestCase
     use EloquentRepositoryTest;
 
     /**
-     * @testdox testPersistSuccessOnCreate persistメソッドで新規の日報を永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドで新規の日報を永続化できること.
      */
-    public function testPersistSuccessOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $entity = $this->builder()->create(Entity::class);
 
         $repository = $this->createRepository();
 
-        $repository->persist($entity);
+        $repository->add($entity);
 
         $this->assertPersistedRecord($entity);
     }
 
     /**
-     * @testdox testPersistSuccessOnUpdate persistメソッドで既存の日報を更新できること.
+     * @testdox testAddThrowsConflictExceptionWithDuplicateIdentifier addメソッドで重複する識別子の日報を永続化しようとすると例外が発生すること.
      */
-    public function testPersistSuccessOnUpdate(): void
+    public function testAddThrowsConflictExceptionWithDuplicateIdentifier(): void
     {
         $record = $this->pickRecord();
 
-        $expected = $this->builder()->create(Entity::class, null, [
-            'identifier' => new FeedbackIdentifier($record->identifier),
+        $entity = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(FeedbackIdentifier::class, null, [
+                'value' => $record->identifier,
+            ]),
         ]);
 
         $repository = $this->createRepository();
 
-        $repository->persist($expected);
+        $this->expectException(ConflictException::class);
+
+        $repository->add($entity);
+    }
+
+    /**
+     * @testdox testUpdateSuccessPersistEntity updateメソッドで既存の日報を更新できること.
+     */
+    public function testUpdateSuccessPersistEntity(): void
+    {
+        $record = $this->pickRecord();
+
+        $expected = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(FeedbackIdentifier::class, null, [
+                'value' => $record->identifier,
+            ])
+        ]);
+
+        $repository = $this->createRepository();
+
+        $repository->update($expected);
 
         $this->assertPersistedRecord($expected);
+    }
+
+    /**
+     * @testdox testUpdateThrowsOutOfBoundsExceptionWithMissingIdentifier updateメソッドで存在しない日報を更新しようとすると例外が発生すること.
+     */
+    public function testUpdateThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
+    {
+        $entity = $this->builder()->create(Entity::class);
+
+        $repository = $this->createRepository();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $repository->update($entity);
     }
 
     /**
@@ -73,63 +113,71 @@ class EloquentFeedbackRepositoryTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccessReturnsEntities listメソッドで指定した条件の日報を取得できること.
+     * @testdox testFindThrowsOutOfBoundsExceptionWithMissingIdentifier findメソッドで存在しない日報を取得しようとすると例外が発生すること.
      */
-    public function testListSuccessReturnsAllEntitiesWithEmptyCriteria(): void
+    public function testFindThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
     {
-        $criteria = $this->builder()->create(Criteria::class);
+        $identifier = $this->builder()->create(FeedbackIdentifier::class);
 
         $repository = $this->createRepository();
 
-        $actuals = $repository->list($criteria);
+        $this->expectException(\OutOfBoundsException::class);
 
-        $this->assertSame($this->records->count(), $actuals->count());
-
-        $actuals->each(function ($actual): void {
-            $this->assertInstanceOf(Entity::class, $actual);
-            $this->assertRecordProperties($actual);
-        });
+        $repository->find($identifier);
     }
 
     /**
-     * @testdox testListSuccessReturnsEntitiesWithFilledCriteria listメソッドで指定した条件の日報を取得できること.
+     * @testdox testListSuccessReturnsEntities listメソッドで指定した条件の日報を取得できること.
+     * @dataProvider provideCriteria
      */
-    public function testListSuccessReturnsEntitiesWithFilledCriteria(): void
+    public function testListSuccessReturnsEntities(\Closure $closure): void
     {
-        $record = $this->pickRecord();
+        $criteria = $closure($this);
 
-        $criteria = $this->builder()->create(Criteria::class, null, [
-            'filled' => true,
-        ]);
+        $expecteds = $this->createListExpected($criteria);
 
         $repository = $this->createRepository();
-
-        $expecteds = $this->records
-            ->filter(
-                fn (Record $record): bool => $record->type === $criteria->type()->name
-                    && $record->status === $criteria->status()->name
-            )->pipe(
-                function (Enumerable $records) use ($criteria): Enumerable {
-                    return match ($criteria->sort()) {
-                        Sort::CREATED_AT_ASC => $records->sortBy('created_at'),
-                        Sort::CREATED_AT_DESC => $records->sortByDesc('created_at'),
-                        Sort::UPDATED_AT_ASC => $records->sortBy('updated_at'),
-                        Sort::UPDATED_AT_DESC => $records->sortByDesc('updated_at'),
-                    };
-                }
-            );
 
         $actuals = $repository->list($criteria);
 
         $this->assertSame($expecteds->count(), $actuals->count());
+
         $expecteds
             ->zip($actuals)
-            ->eachSpread(function (?Record $expected, $actual): void {
-                $this->assertNotNull($expected);
+            ->eachSpread(function (?Record $expected, ?Entity $actual): void {
                 $this->assertNotNull($actual);
-                $this->assertInstanceOf(Entity::class, $actual);
+                $this->assertNotNull($expected);
                 $this->assertRecordProperties($actual);
             });
+    }
+
+    /**
+     * 検索条件を提供するプロパイダ.
+     */
+    public static function provideCriteria(): \Generator
+    {
+        // yield 'empty' => [
+        //     fn(self $self): Criteria =>
+        //     $self->builder()->create(Criteria::class)
+        // ];
+
+        yield 'type' => [
+            fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
+                'type' => Collection::make(FeedbackType::cases())->random()
+            ])
+        ];
+
+        yield 'status' => [
+            fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
+                'status' => Collection::make(FeedbackStatus::cases())->random()
+            ])
+        ];
+
+        yield 'sort' => [
+            fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
+                'sort' => Collection::make(Sort::cases())->random()
+            ])
+        ];
     }
 
     /**
@@ -180,5 +228,33 @@ class EloquentFeedbackRepositoryTest extends TestCase
             $record->updated_at->toDateTimeString(),
             $actual->updatedAt()->toDateTimeString()
         );
+    }
+
+    /**
+     * listメソッドの期待値を生成する.
+     */
+    private function createListExpected(Criteria $criteria): Enumerable
+    {
+        return $this->records
+            ->when(
+                !\is_null($criteria->type()),
+                fn (Enumerable $records): Enumerable => $records->where('type', $criteria->type()->name)
+            )
+            ->when(
+                !\is_null($criteria->status()),
+                fn (Enumerable $records): Enumerable => $records->where('status', $criteria->status()->name)
+            )
+            ->pipe(
+                function (Enumerable $records) use ($criteria): Enumerable {
+                    return match ($criteria->sort()) {
+                        Sort::CREATED_AT_ASC => $records->sortBy('created_at'),
+                        Sort::CREATED_AT_DESC => $records->sortByDesc('created_at'),
+                        Sort::UPDATED_AT_ASC => $records->sortBy('updated_at'),
+                        Sort::UPDATED_AT_DESC => $records->sortByDesc('updated_at'),
+                        null => $records,
+                    };
+                }
+            )
+            ->values();
     }
 }

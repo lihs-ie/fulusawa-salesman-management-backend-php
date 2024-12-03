@@ -4,7 +4,7 @@ namespace Tests\Unit\Http\Requests\API\Feedback;
 
 use App\Domains\Feedback\ValueObjects\FeedbackStatus;
 use App\Domains\Feedback\ValueObjects\FeedbackType;
-use App\Http\Requests\API\Feedback\PersistRequest;
+use App\Http\Requests\API\Feedback\UpdateRequest;
 use Carbon\CarbonImmutable;
 use Ramsey\Uuid\Uuid;
 use Illuminate\Support\Str;
@@ -19,7 +19,7 @@ use Tests\Unit\Http\Requests\API\CommandRequestTest;
  *
  * @coversNothing
  */
-class PersistRequestTest extends TestCase
+class UpdateRequestTest extends TestCase
 {
     use CommandRequestTest;
 
@@ -28,7 +28,7 @@ class PersistRequestTest extends TestCase
      */
     protected function target(): string
     {
-        return PersistRequest::class;
+        return UpdateRequest::class;
     }
 
     /**
@@ -37,7 +37,6 @@ class PersistRequestTest extends TestCase
     protected function createDefaultPayload(): array
     {
         return [
-          'identifier' => Uuid::uuid7()->toString(),
           'type' => FeedbackType::IMPROVEMENT->name,
           'status' => FeedbackStatus::WAITING->name,
           'content' => Str::random(\mt_rand(1, 1000)),
@@ -51,7 +50,9 @@ class PersistRequestTest extends TestCase
      */
     protected function createDefaultRoute(): array
     {
-        return [];
+        return [
+          'identifier' => Uuid::uuid7()->toString(),
+        ];
     }
 
     /**
@@ -79,12 +80,6 @@ class PersistRequestTest extends TestCase
     protected function getInvalidPayloadPatterns(): array
     {
         return [
-          'identifier' => [
-            'invalid type' => \mt_rand(1, 255),
-            'invalid format' => 'invalid',
-            'null' => null,
-            'empty' => '',
-          ],
           'type' => [
             'invalid type' => \mt_rand(1, 255),
             'invalid format' => 'invalid',
@@ -134,6 +129,13 @@ class PersistRequestTest extends TestCase
      */
     protected function getInvalidRoutePatterns(): array
     {
-        return [];
+        return [
+          'identifier' => [
+            'invalid type' => \mt_rand(1, 255),
+            'invalid format' => 'invalid',
+            'null' => null,
+            'empty' => '',
+          ],
+        ];
     }
 }

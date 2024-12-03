@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\API;
 
 use App\Domains\Feedback\Entities\Feedback;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Encoders\Feedback\FeedbackEncoder;
+use App\Http\Requests\API\Feedback\AddRequest;
 use App\Http\Requests\API\Feedback\FindRequest;
 use App\Http\Requests\API\Feedback\ListRequest;
-use App\Http\Requests\API\Feedback\PersistRequest;
+use App\Http\Requests\API\Feedback\UpdateRequest;
 use App\UseCases\Feedback as UseCase;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -21,18 +24,18 @@ class FeedbackController extends Controller
     /**
      * フィードバック追加.
      *
-     * @param PersistRequest $request
+     * @param AddRequest $request
      * @param UseCase $useCase
      */
-    public function create(PersistRequest $request, UseCase $useCase)
+    public function add(AddRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->add(
                 identifier: $parameters['identifier'],
-                status: $parameters['status'],
                 type: $parameters['type'],
+                status: $parameters['status'],
                 content: $parameters['content'],
                 createdAt: $parameters['createdAt'],
                 updatedAt: $parameters['updatedAt']
@@ -41,24 +44,26 @@ class FeedbackController extends Controller
             return new Response('', Response::HTTP_CREATED);
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
+        } catch (ConflictException $exception) {
+            throw new ConflictHttpException($exception->getMessage());
         }
     }
 
     /**
      * フィードバック更新.
      *
-     * @param PersistRequest $request
+     * @param UpdateRequest $request
      * @param UseCase $useCase
      */
-    public function update(PersistRequest $request, UseCase $useCase)
+    public function update(UpdateRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->update(
                 identifier: $parameters['identifier'],
-                status: $parameters['status'],
                 type: $parameters['type'],
+                status: $parameters['status'],
                 content: $parameters['content'],
                 createdAt: $parameters['createdAt'],
                 updatedAt: $parameters['updatedAt']
@@ -109,9 +114,9 @@ class FeedbackController extends Controller
             $feedbacks = $useCase->list($request->all());
 
             return [
-              'feedback' => $feedbacks->map(
-                  fn (Feedback $feedback): array => $encoder->encode($feedback)
-              )->all()
+                'feedbacks' => $feedbacks->map(
+                    fn (Feedback $feedback): array => $encoder->encode($feedback)
+                )->all()
             ];
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestHttpException($exception->getMessage());

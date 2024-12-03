@@ -6,9 +6,9 @@ use App\Http\Requests\API\AbstractRequest;
 use App\Validation\Rules;
 
 /**
- * フィードバック永続化リクエスト.
+ * フィードバック追加リクエスト.
  */
-class PersistRequest extends AbstractRequest
+class AddRequest extends AbstractRequest
 {
     /**
      * {@inheritdoc}

@@ -26,7 +26,7 @@ class Feedback
     }
 
     /**
-     * フィードバックを永続化する
+     * フィードバックを追加する
      *
      * @param string $identifier
      * @param string $type
@@ -36,7 +36,7 @@ class Feedback
      * @param string $updatedAt
      * @return void
      */
-    public function persist(
+    public function add(
         string $identifier,
         string $type,
         string $status,
@@ -54,7 +54,39 @@ class Feedback
         );
 
 
-        $this->repository->persist($entity);
+        $this->repository->add($entity);
+    }
+
+    /**
+     * フィードバックを更新する
+     *
+     * @param string $identifier
+     * @param string $type
+     * @param string $status
+     * @param string $content
+     * @param string $createdAt
+     * @param string $updatedAt
+     * @return void
+     */
+    public function update(
+        string $identifier,
+        string $type,
+        string $status,
+        string $content,
+        string $createdAt,
+        string $updatedAt
+    ): void {
+        $entity = new Entity(
+            identifier: new FeedbackIdentifier($identifier),
+            type: $this->convertType($type),
+            status: $this->convertStatus($status),
+            content: $content,
+            createdAt: CarbonImmutable::parse($createdAt),
+            updatedAt: CarbonImmutable::parse($updatedAt),
+        );
+
+
+        $this->repository->update($entity);
     }
 
     /**
