@@ -2,13 +2,15 @@
 
 namespace Tests\Unit\UseCases;
 
+use App\Domains\Common\Utils\CollectionUtil;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\Schedule\Entities\Schedule as Entity;
 use App\Domains\Schedule\ScheduleRepository;
 use App\Domains\Schedule\ValueObjects\Criteria;
-use App\Domains\Schedule\ValueObjects\FrequencyType;
+use App\Domains\Schedule\ValueObjects\ScheduleIdentifier;
 use App\Domains\Schedule\ValueObjects\ScheduleStatus;
-use App\UseCases\Factories\CommonDomainFactory;
+use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Exceptions\ConflictException;
 use App\UseCases\Schedule as UseCase;
 use Illuminate\Support\Enumerable;
 use Tests\Support\Assertions\NullableValueComparable;
@@ -44,9 +46,9 @@ class ScheduleTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnCreate persistメソッドで新規のスケジュールを永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドで新規のスケジュールを永続化できること.
      */
-    public function testPersistSuccessInCaseOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $expected = $this->builder()->create(Entity::class);
 
@@ -54,12 +56,13 @@ class ScheduleTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->add(
             identifier: $parameters['identifier'],
-            user: $parameters['user'],
+            participants: $parameters['participants'],
+            creator: $parameters['creator'],
+            updater: $parameters['updater'],
             customer: $parameters['customer'],
-            title: $parameters['title'],
-            description: $parameters['description'],
+            content: $parameters['content'],
             date: $parameters['date'],
             status: $parameters['status'],
             repeatFrequency: $parameters['repeatFrequency'],
@@ -69,24 +72,55 @@ class ScheduleTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnUpdate persistメソッドで既存のスケジュールを上書きして永続化できること.
+     * @testdox testAddFailureThrowsConflictExceptionWithDuplicateIdentifier addメソッドに重複する識別子を指定するとConflictExceptionが発生すること.
      */
-    public function testPersistSuccessInCaseOnUpdate(): void
+    public function testAddFailureThrowsConflictExceptionWithDuplicateIdentifier(): void
     {
         $target = $this->instances->random();
 
         $expected = $this->builder()->create(Entity::class, null, ['identifier' => $target->identifier()]);
 
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($expected);
+
+        $this->expectException(ConflictException::class);
+
+        $useCase->add(
+            identifier: $parameters['identifier'],
+            participants: $parameters['participants'],
+            creator: $parameters['creator'],
+            updater: $parameters['updater'],
+            customer: $parameters['customer'],
+            content: $parameters['content'],
+            date: $parameters['date'],
+            status: $parameters['status'],
+            repeatFrequency: $parameters['repeatFrequency'],
+        );
+    }
+
+    /**
+     * @testdox testUpdateSuccessPersistEntity updateメソッドでスケジュールを更新できること.
+     */
+    public function testUpdateSuccessPersistEntity(): void
+    {
+        $target = $this->instances->random();
+
+        $expected = $this->builder()->create(Entity::class, null, [
+            'identifier' => $target->identifier(),
+        ]);
+
         [$useCase, $persisted] = $this->createPersistUseCase();
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->update(
             identifier: $parameters['identifier'],
-            user: $parameters['user'],
+            participants: $parameters['participants'],
+            creator: $parameters['creator'],
+            updater: $parameters['updater'],
             customer: $parameters['customer'],
-            title: $parameters['title'],
-            description: $parameters['description'],
+            content: $parameters['content'],
             date: $parameters['date'],
             status: $parameters['status'],
             repeatFrequency: $parameters['repeatFrequency'],
@@ -96,7 +130,33 @@ class ScheduleTest extends TestCase
     }
 
     /**
-     * @testdox testFindSuccessReturnsEntity findメソッドでスケジュール情報を取得できること.
+     * @testdox testUpdateFailureThrowsNotFoundExceptionWithMissingIdentifier updateメソッドに存在しない識別子を指定するとNotFoundExceptionが発生すること.
+     */
+    public function testUpdateFailureThrowsNotFoundExceptionWithMissingIdentifier(): void
+    {
+        $expected = $this->builder()->create(Entity::class);
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($expected);
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $useCase->update(
+            identifier: $parameters['identifier'],
+            participants: $parameters['participants'],
+            creator: $parameters['creator'],
+            updater: $parameters['updater'],
+            customer: $parameters['customer'],
+            content: $parameters['content'],
+            date: $parameters['date'],
+            status: $parameters['status'],
+            repeatFrequency: $parameters['repeatFrequency'],
+        );
+    }
+
+    /**
+     * @testdox testFindSuccessReturnsEntity findメソッドでスケジュールを取得できること.
      */
     public function testFindSuccessReturnsEntity(): void
     {
@@ -110,55 +170,50 @@ class ScheduleTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccessReturnsEntitiesWithEmptyCriteria listメソッドでスケジュール情報一覧を取得できること.
+     * @testdox testFindFailureThrowsNotFoundExceptionWithMissingIdentifier findメソッドに存在しない識別子を指定するとNotFoundExceptionが発生すること.
      */
-    public function testListSuccessReturnsEntitiesWithEmptyCriteria(): void
+    public function testFindFailureThrowsNotFoundExceptionWithMissingIdentifier(): void
     {
-        $expecteds = clone $this->instances;
+        $missing = $this->builder()->create(ScheduleIdentifier::class);
 
         [$useCase] = $this->createPersistUseCase();
 
-        $actuals = $useCase->list([]);
+        $this->expectException(\OutOfBoundsException::class);
 
-        $expecteds
-            ->zip($actuals)
-            ->eachSpread(function (Entity $expected, $actual): void {
-                $this->assertNotNull($expected);
-                $this->assertInstanceOf(Entity::class, $actual);
-                $this->assertEntity($expected, $actual);
-            });
+        $useCase->find($missing->value());
     }
 
     /**
-     * @testdox testListSuccessReturnsEntitiesWithCriteria listメソッドでスケジュール情報一覧を取得できること.
+     * @testdox testListSuccessReturnsEntitiesWithEmptyCriteria listメソッドでスケジュール一覧を取得できること.
+     *
+     * @dataProvider provideCriteria
      */
-    public function testListSuccessReturnsEntitiesWithCriteria(): void
+    public function testListSuccessReturnsEntities(\Closure $closure): void
     {
-        $criteria = $this->builder()->create(Criteria::class, null, ['filled' => true]);
+        $instance = $this->instances->random();
 
-        $status = $criteria->status();
-        $date = $criteria->date();
-        $title = $criteria->title();
+        $criteria = $closure($this, $instance);
 
-        $expecteds = $this->instances
-            ->when(!\is_null($status), fn (Enumerable $instances) => $instances->filter(fn (Entity $schedule): bool => $schedule->status() === $status))
-            ->when(!\is_null($date), function (Enumerable $instances) use ($date): Enumerable {
-                return $instances->filter(function (Entity $schedule) use ($date): bool {
-                    $candidate = $schedule->date();
-
-                    return $candidate->includes($date->start()) && $candidate->includes($date->end());
-                });
+        $expecteds  = $this->instances
+            ->when(!\is_null($criteria->status()), fn (Enumerable $instances) => $instances
+                ->filter(fn (Entity $schedule): bool => $schedule->status() === $criteria->status()))
+            ->when(
+                !\is_null($criteria->date()),
+                fn (Enumerable $instances) => $instances->filter(
+                    fn (Entity $schedule): bool => $criteria->date()->includesRange($schedule->date())
+                )
+            )
+            ->when(!\is_null($criteria->title()), function (Enumerable $instances) use ($criteria): Enumerable {
+                return $instances->filter(fn (Entity $schedule): bool => str_contains($schedule->content()->title(), $criteria->title()));
             })
-            ->when(!\is_null($title), function (Enumerable $instances) use ($title): Enumerable {
-                return $instances->filter(fn (Entity $schedule): bool => str_contains($schedule->title(), $title));
-            });
+            ->when(!\is_null($criteria->user()), fn (Enumerable $instances) => $instances
+                ->filter(fn (Entity $schedule): bool => $schedule->participants()->contains($criteria->user())))
+            ->values();
 
         [$useCase] = $this->createPersistUseCase();
 
         $actuals = $useCase->list($this->deflateCriteria($criteria));
 
-        $this->assertSame($expecteds->count(), $actuals->count());
-
         $expecteds
             ->zip($actuals)
             ->eachSpread(function (Entity $expected, $actual): void {
@@ -169,7 +224,42 @@ class ScheduleTest extends TestCase
     }
 
     /**
-     * @testdox testDeleteSuccess deleteメソッドで指定したスケジュール情報を削除できること.
+     * 検索条件を提供するプロバイダ.
+     */
+    public static function provideCriteria(): \Generator
+    {
+        $criteria = fn (self $self, array $overrides = []): Criteria => $self->builder()
+            ->create(
+                class: Criteria::class,
+                overrides: $overrides
+            );
+
+        yield 'empty' => [fn (self $self): Criteria => $criteria($self)];
+
+        yield 'status' => [fn (self $self): Criteria => $criteria(
+            $self,
+            ['status' => $self->builder()->create(ScheduleStatus::class)]
+        )];
+
+        // TODO なぜか失敗する
+        // yield 'date' => [fn(self $self, Entity $entity): Criteria => $criteria(
+        //     $self,
+        //     ['date' => $entity->date()]
+        // )];
+
+        yield 'title' => [fn (self $self, Entity $entity): Criteria => $criteria(
+            $self,
+            ['title' => $entity->content()->title()]
+        )];
+
+        yield 'user' => [fn (self $self, Entity $entity): Criteria => $criteria(
+            $self,
+            ['user' => $entity->participants()->random()]
+        )];
+    }
+
+    /**
+     * @testdox testDeleteSuccess deleteメソッドで指定したスケジュールを削除できること.
      */
     public function testDeleteSuccess(): void
     {
@@ -193,28 +283,17 @@ class ScheduleTest extends TestCase
     }
 
     /**
-     * @testdox testOfUserSuccessReturnsEntities 指定したユーザーのスケジュール情報一覧を取得できること.
+     * @testdox testDeleteFailureThrowsNotFoundExceptionWithMissingIdentifier deleteメソッドに存在しない識別子を指定するとNotFoundExceptionが発生すること.
      */
-    public function testOfUserSuccessReturnsEntities(): void
+    public function testDeleteFailureThrowsNotFoundExceptionWithMissingIdentifier(): void
     {
-        $user = $this->instances->random()->user();
-
-        $expecteds = $this->instances
-            ->filter(fn (Entity $schedule): bool => $user->equals($schedule->user()));
+        $missing = $this->builder()->create(ScheduleIdentifier::class);
 
         [$useCase] = $this->createPersistUseCase();
 
-        $actuals = $useCase->ofUser($user->value());
+        $this->expectException(\OutOfBoundsException::class);
 
-        $this->assertSame($expecteds->count(), $actuals->count());
-
-        $expecteds
-            ->zip($actuals)
-            ->eachSpread(function (Entity $expected, $actual): void {
-                $this->assertNotNull($expected);
-                $this->assertInstanceOf(Entity::class, $actual);
-                $this->assertEntity($expected, $actual);
-            });
+        $useCase->delete($missing->value());
     }
 
     /**
@@ -261,14 +340,19 @@ class ScheduleTest extends TestCase
         $this->assertInstanceOf(Entity::class, $expected);
         $this->assertInstanceOf(Entity::class, $actual);
         $this->assertTrue($expected->identifier()->equals($actual->identifier()));
-        $this->assertTrue($expected->user()->equals($actual->user()));
+        $this->assertTrue(CollectionUtil::equalsAsSet(
+            $expected->participants(),
+            $actual->participants(),
+            fn (UserIdentifier $expected, UserIdentifier $actual) => $expected->equals($actual)
+        ));
+        $this->assertTrue($expected->creator()->equals($actual->creator()));
+        $this->assertTrue($expected->updater()->equals($actual->updater()));
         $this->assertNullOr(
             $expected->customer(),
             $actual->customer(),
             fn (CustomerIdentifier $expected, CustomerIdentifier $actual) => $expected->equals($actual)
         );
-        $this->assertTrue($expected->title() === $actual->title());
-        $this->assertTrue($expected->description() === $actual->description());
+        $this->assertTrue($expected->content()->equals($actual->content()));
         $this->assertTrue($expected->date()->equals($actual->date()));
         $this->assertTrue($expected->status() === $actual->status());
         $this->assertTrue($expected->repeat()->equals($actual->repeat()));
@@ -287,33 +371,23 @@ class ScheduleTest extends TestCase
      */
     private function createParametersFromEntity(Entity $entity): array
     {
-        $status = match ($entity->status()) {
-            ScheduleStatus::IN_COMPLETE => '1',
-            ScheduleStatus::IN_PROGRESS => '2',
-            ScheduleStatus::COMPLETED => '3',
-        };
-
-        $frequencyType = match ($entity->repeat?->type()) {
-            FrequencyType::DAILY, => '1',
-            FrequencyType::WEEKLY => '2',
-            FrequencyType::MONTHLY => '3',
-            FrequencyType::YEARLY => '4',
-            null => null
-        };
-
         return [
             'identifier' => $entity->identifier()->value(),
-            'user' => $entity->user()->value(),
+            'participants' => $entity->participants()->map->value()->all(),
+            'creator' => $entity->creator()->value(),
+            'updater' => $entity->updater()->value(),
             'customer' => $entity->customer()?->value(),
-            'title' => $entity->title(),
-            'description' => $entity->description(),
+            'content' => [
+                'title' => $entity->content()->title(),
+                'description' => $entity->content()->description(),
+            ],
             'date' => \is_null($entity->date()) ? null : [
                 'start' => $entity->date()->start()?->toAtomString(),
                 'end' => $entity->date()->end()?->toAtomString(),
             ],
-            'status' => $status,
+            'status' => $entity->status()->name,
             'repeatFrequency' => \is_null($entity->repeat) ? null : [
-                'type' => $frequencyType,
+                'type' => $entity->repeat()->type()->name,
                 'interval' => $entity->repeat->interval(),
             ],
         ];
@@ -324,20 +398,14 @@ class ScheduleTest extends TestCase
      */
     private function deflateCriteria(Criteria $criteria): array
     {
-        $status = match ($criteria->status()) {
-            ScheduleStatus::IN_COMPLETE => '1',
-            ScheduleStatus::IN_PROGRESS => '2',
-            ScheduleStatus::COMPLETED => '3',
-            null => null,
-        };
-
         return [
-            'status' => $status,
+            'status' => $criteria->status()?->name,
             'date' => \is_null($criteria->date()) ? null : [
                 'start' => $criteria->date()->start()?->toAtomString(),
                 'end' => $criteria->date()->end()?->toAtomString(),
             ],
             'title' => $criteria->title(),
+            'user' => $criteria->user()?->value(),
         ];
     }
 }

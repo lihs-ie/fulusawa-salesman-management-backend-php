@@ -3,6 +3,7 @@
 namespace App\Domains\Schedule\ValueObjects;
 
 use App\Domains\Common\ValueObjects\DateTimeRange;
+use App\Domains\User\ValueObjects\UserIdentifier;
 
 /**
  * スケジュールの検索条件を表す値オブジェクト
@@ -13,6 +14,7 @@ class Criteria
         public readonly ScheduleStatus|null $status,
         public readonly DateTimeRange|null $date,
         public readonly string|null $title,
+        public readonly UserIdentifier|null $user,
     ) {
         if (!\is_null($title) && \mb_strlen($title) === 0) {
             throw new \InvalidArgumentException('Title must not be empty.');
@@ -34,8 +36,17 @@ class Criteria
         return $this->title;
     }
 
-    public function equals(Criteria $other): bool
+    public function user(): UserIdentifier|null
     {
+        return $this->user;
+    }
+
+    public function equals(?Criteria $other): bool
+    {
+        if (\is_null($other)) {
+            return false;
+        }
+
         if ($this->status !== $other->status) {
             return false;
         }
@@ -45,6 +56,10 @@ class Criteria
         }
 
         if ($this->title !== $other->title) {
+            return false;
+        }
+
+        if (!$this->user->equals($other->user)) {
             return false;
         }
 

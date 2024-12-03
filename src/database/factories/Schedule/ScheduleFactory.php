@@ -2,7 +2,7 @@
 
 namespace Database\Factories\Schedule;
 
-use App\Domains\Schedule\Entities\Schedule;
+use App\Domains\Schedule\ValueObjects\ScheduleContent;
 use App\Domains\Schedule\ValueObjects\ScheduleStatus;
 use Database\Factories\User\UserFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -23,10 +23,16 @@ class ScheduleFactory extends Factory
 
         return [
             'identifier' => Uuid::uuid7()->toString(),
-            'user' => new UserFactory(),
+            'participants' => UserFactory::new()
+                ->count(\mt_rand(1, 10))
+                ->create()
+                ->pluck('identifier')
+                ->toJson(),
+            'creator' => new UserFactory(),
+            'updater' => new UserFactory(),
             'customer' => null,
-            'title' => Str::random(\mt_rand(1, Schedule::MAX_TITLE_LENGTH)),
-            'description' => Str::random(\mt_rand(5, Schedule::MAX_DESCRIPTION_LENGTH)),
+            'title' => Str::random(\mt_rand(1, ScheduleContent::MAX_TITLE_LENGTH)),
+            'description' => Str::random(\mt_rand(5, ScheduleContent::MAX_DESCRIPTION_LENGTH)),
             'start' => $start,
             'end' => $this->faker->dateTimeBetween($start),
             'status' => Collection::make(ScheduleStatus::cases())->random()->name,

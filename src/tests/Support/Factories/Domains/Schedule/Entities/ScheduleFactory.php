@@ -5,10 +5,10 @@ namespace Tests\Support\Factories\Domains\Schedule\Entities;
 use App\Domains\Common\ValueObjects\DateTimeRange;
 use App\Domains\Schedule\Entities\Schedule;
 use App\Domains\Schedule\ValueObjects\RepeatFrequency;
+use App\Domains\Schedule\ValueObjects\ScheduleContent;
 use App\Domains\Schedule\ValueObjects\ScheduleIdentifier;
 use App\Domains\Schedule\ValueObjects\ScheduleStatus;
 use App\Domains\User\ValueObjects\UserIdentifier;
-use Illuminate\Support\Str;
 use Tests\Support\DependencyBuilder;
 use Tests\Support\DependencyFactory;
 
@@ -24,10 +24,11 @@ class ScheduleFactory extends DependencyFactory
     {
         return new Schedule(
             identifier: $overrides['identifier'] ?? $builder->create(ScheduleIdentifier::class, $seed, $overrides),
-            user: $overrides['user'] ?? $builder->create(UserIdentifier::class, $seed, $overrides),
+            participants: $overrides['participants'] ?? $builder->createList(UserIdentifier::class, \mt_rand(1, 10), $overrides),
+            creator: $overrides['creator'] ?? $builder->create(UserIdentifier::class, $seed, $overrides),
+            updater: $overrides['updater'] ?? $builder->create(UserIdentifier::class, $seed, $overrides),
             customer: $overrides['customer'] ?? null,
-            title: $overrides['title'] ?? Str::random(\mt_rand(\abs($seed) % 10, 255)),
-            description: $overrides['description'] ?? null,
+            content: $overrides['content'] ?? $builder->create(ScheduleContent::class, $seed, $overrides),
             date: $overrides['date'] ?? $builder->create(DateTimeRange::class, $seed, ['filled' => true]),
             status: $overrides['status'] ?? $builder->create(ScheduleStatus::class, $seed, $overrides),
             repeat: $overrides['repeat'] ?? $builder->create(RepeatFrequency::class, $seed, $overrides),
@@ -45,10 +46,11 @@ class ScheduleFactory extends DependencyFactory
 
         return new Schedule(
             identifier: $overrides['identifier'] ?? $instance->identifier(),
-            user: $overrides['user'] ?? $instance->user(),
+            participants: $overrides['participants'] ?? $instance->participants(),
+            creator: $overrides['creator'] ?? $instance->creator(),
+            updater: $overrides['updater'] ?? $instance->updater(),
             customer: $overrides['customer'] ?? $instance->customer(),
-            title: $overrides['title'] ?? $instance->title(),
-            description: $overrides['description'] ?? $instance->description(),
+            content: $overrides['content'] ?? $instance->content(),
             date: $overrides['date'] ?? $instance->date(),
             status: $overrides['status'] ?? $instance->status(),
             repeat: $overrides['repeat'] ?? $instance->repeat(),

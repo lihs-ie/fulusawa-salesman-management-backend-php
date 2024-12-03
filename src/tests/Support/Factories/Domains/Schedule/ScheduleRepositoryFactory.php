@@ -7,6 +7,7 @@ use App\Domains\Schedule\Entities\Schedule;
 use App\Domains\Schedule\ValueObjects\Criteria;
 use App\Domains\Schedule\ValueObjects\ScheduleIdentifier;
 use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Exceptions\ConflictException;
 use Closure;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuilder;
@@ -19,6 +20,8 @@ class ScheduleRepositoryFactory extends DependencyFactory
 {
     /**
      * {@inheritdoc}
+     *
+     * @SuppressWarnings(PHPMD.ExcessiveMethodLength)
      */
     public function create(DependencyBuilder $builder, int $seed, array $overrides): ScheduleRepository
     {
@@ -43,9 +46,31 @@ class ScheduleRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function persist(Schedule $schedule): void
+            public function add(Schedule $schedule): void
             {
                 $key = $schedule->identifier()->value();
+
+                if ($this->instances->has($key)) {
+                    throw new ConflictException('Schedule already exists.');
+                }
+
+                $this->instances = clone $this->instances->put($key, $schedule);
+
+                if ($callback = $this->onPersist) {
+                    $callback($schedule);
+                }
+            }
+
+            /**
+             * {@inheritdoc}
+             */
+            public function update(Schedule $schedule): void
+            {
+                $key = $schedule->identifier()->value();
+
+                if (!$this->instances->has($key)) {
+                    throw new \OutOfBoundsException('Schedule not found.');
+                }
 
                 $this->instances = clone $this->instances->put($key, $schedule);
 
@@ -59,13 +84,13 @@ class ScheduleRepositoryFactory extends DependencyFactory
              */
             public function find(ScheduleIdentifier $identifier): Schedule
             {
+                if (!$this->instances->has($identifier->value())) {
+                    throw new \OutOfBoundsException('Schedule not found.');
+                }
+
                 $instance = $this->instances->first(
                     fn (Schedule $schedule): bool => $schedule->identifier()->equals($identifier)
                 );
-
-                if ($instance === null) {
-                    throw new \OutOfBoundsException('Schedule not found.');
-                }
 
                 return $instance;
             }
@@ -80,26 +105,20 @@ class ScheduleRepositoryFactory extends DependencyFactory
                 $title = $criteria->title();
 
                 return $this->instances
-                  ->when(!\is_null($status), fn (Enumerable $instances) => $instances->filter(fn (Schedule $schedule): bool => $schedule->status() === $status))
-                  ->when(!\is_null($date), function (Enumerable $instances) use ($date): Enumerable {
-                      return $instances->filter(function (Schedule $schedule) use ($date): bool {
-                          $candidate = $schedule->date();
-
-                          return $candidate->includes($date->start()) && $candidate->includes($date->end());
-                      });
-                  })
-                  ->when(!\is_null($title), function (Enumerable $instances) use ($title): Enumerable {
-                      return $instances->filter(fn (Schedule $schedule): bool => str_contains($schedule->title(), $title));
-                  });
-            }
-
-            /**
-             * {@inheritdoc}
-             */
-            public function ofUser(UserIdentifier $user): Enumerable
-            {
-                return $this->instances
-                  ->filter(fn (Schedule $schedule): bool => $schedule->user()->equals($user));
+                    ->when(!\is_null($status), fn (Enumerable $instances) => $instances->filter(fn (Schedule $schedule): bool => $schedule->status() === $status))
+                    ->when(
+                        !\is_null($date),
+                        fn (Enumerable $instances) => $instances->filter(fn (Schedule $schedule): bool => $schedule->date()->includesRange($date))
+                    )
+                    ->when(!\is_null($title), function (Enumerable $instances) use ($title): Enumerable {
+                        return $instances->filter(
+                            fn (Schedule $schedule): bool => str_contains($schedule->content()->title(), $title)
+                        );
+                    })
+                    ->when(
+                        !\is_null($user = $criteria->user()),
+                        fn (Enumerable $instances) => $instances->filter(fn (Schedule $schedule): bool => $schedule->participants()->contains($user))
+                    );
             }
 
             /**
@@ -107,6 +126,10 @@ class ScheduleRepositoryFactory extends DependencyFactory
              */
             public function delete(ScheduleIdentifier $identifier): void
             {
+                if (!$this->instances->has($identifier->value())) {
+                    throw new \OutOfBoundsException('Schedule not found.');
+                }
+
                 $removed = $this->instances->reject(
                     fn (Schedule $instance): bool => $instance->identifier()->equals($identifier)
                 );

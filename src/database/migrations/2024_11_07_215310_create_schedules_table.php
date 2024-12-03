@@ -1,6 +1,6 @@
 <?php
 
-use App\Domains\Schedule\Entities\Schedule;
+use App\Domains\Schedule\ValueObjects\ScheduleContent;
 use App\Domains\Schedule\ValueObjects\ScheduleStatus;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -15,9 +15,11 @@ return new class () extends Migration {
     {
         Schema::create('schedules', function (Blueprint $table) {
             $table->uuid('identifier')->primary();
-            $table->uuid('user');
+            $table->jsonb('participants');
+            $table->uuid('creator');
+            $table->uuid('updater');
             $table->uuid('customer')->nullable();
-            $table->string('title', Schedule::MAX_TITLE_LENGTH);
+            $table->string('title', ScheduleContent::MAX_TITLE_LENGTH);
             $table->longText('description')->nullable();
             $table->dateTime('start');
             $table->dateTime('end');
@@ -31,11 +33,15 @@ return new class () extends Migration {
             $table->jsonb('repeat')->nullable();
             $table->timestamps();
 
-            $table->foreign('user', 'fk_schedules_01')
+            $table->foreign('creator', 'fk_schedules_01')
                 ->references('identifier')
                 ->on('users');
 
-            $table->foreign('customer', 'fk_schedules_02')
+            $table->foreign('updater', 'fk_schedules_02')
+                ->references('identifier')
+                ->on('users');
+
+            $table->foreign('customer', 'fk_schedules_03')
                 ->references('identifier')
                 ->on('customers');
         });

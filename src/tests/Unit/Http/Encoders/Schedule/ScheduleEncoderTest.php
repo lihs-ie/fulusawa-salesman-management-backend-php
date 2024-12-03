@@ -45,10 +45,14 @@ class ScheduleEncoderTest extends TestCase
 
         $this->assertIsArray($actual);
         $this->assertSame($schedule->identifier()->value(), $actual['identifier']);
-        $this->assertSame($schedule->user()->value(), $actual['user']);
+        $this->assertIsArray($actual['participants']);
+        $this->assertSame($schedule->participants()->map->value()->all(), $actual['participants']);
+        $this->assertSame($schedule->creator()->value(), $actual['creator']);
+        $this->assertSame($schedule->updater()->value(), $actual['updater']);
         $this->assertSame($schedule->customer()?->value(), $actual['customer']);
-        $this->assertSame($schedule->title(), $actual['title']);
-        $this->assertSame($schedule->description(), $actual['description']);
+        $this->assertIsArray($actual['content']);
+        $this->assertSame($schedule->content()->title(), $actual['content']['title']);
+        $this->assertSame($schedule->content()->description(), $actual['content']['description']);
         $this->assertSame($schedule->date()->start()->toAtomString(), $actual['date']['start']);
         $this->assertSame($schedule->date()->end()->toAtomString(), $actual['date']['end']);
         $this->assertSame($schedule->status()->name, $actual['status']);

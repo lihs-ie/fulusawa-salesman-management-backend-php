@@ -8,18 +8,21 @@ use App\Domains\Schedule\ScheduleRepository;
 use App\Domains\Schedule\ValueObjects\Criteria;
 use App\Domains\Schedule\ValueObjects\FrequencyType;
 use App\Domains\Schedule\ValueObjects\RepeatFrequency;
+use App\Domains\Schedule\ValueObjects\ScheduleContent;
 use App\Domains\Schedule\ValueObjects\ScheduleIdentifier;
 use App\Domains\Schedule\ValueObjects\ScheduleStatus;
 use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Infrastructures\Common\AbstractEloquentRepository;
 use App\Infrastructures\Schedule\Models\Schedule as Record;
 use App\Infrastructures\Support\Common\EloquentCommonDomainRestorer;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 
 /**
  * スケジュールリポジトリ
  */
-class EloquentScheduleRepository implements ScheduleRepository
+class EloquentScheduleRepository extends AbstractEloquentRepository implements ScheduleRepository
 {
     use EloquentCommonDomainRestorer;
 
@@ -35,28 +38,73 @@ class EloquentScheduleRepository implements ScheduleRepository
     /**
      * {@inheritDoc}
      */
-    public function persist(Entity $schedule): void
+    public function add(Entity $schedule): void
     {
         $repeat = \is_null($schedule->repeat()) ? null : \json_encode([
             'type' => $schedule->repeat()->type()->name,
             'interval' => $schedule->repeat()->interval(),
         ]);
 
-        $this->createQuery()
-            ->updateOrCreate(
-                ['identifier' => $schedule->identifier()->value()],
-                [
+        try {
+            $this->createQuery()
+                ->create([
                     'identifier' => $schedule->identifier()->value(),
-                    'user' => $schedule->user()->value(),
+                    'participants' => $schedule->participants()
+                        ->map
+                        ->value()
+                        ->toJson(),
+                    'creator' => $schedule->creator()->value(),
+                    'updater' => $schedule->updater()->value(),
                     'customer' => $schedule->customer()?->value(),
-                    'title' => $schedule->title(),
-                    'description' => $schedule->description(),
+                    'title' => $schedule->content()->title(),
+                    'description' => $schedule->content()->description(),
                     'start' => $schedule->date()->start()->toAtomString(),
                     'end' => $schedule->date()->end()->toAtomString(),
                     'status' => $schedule->status()->name,
                     'repeat' => $repeat,
-                ]
-            );
+                ]);
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception, $schedule->identifier()->value());
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function update(Entity $schedule): void
+    {
+        $target = $this->createQuery()
+            ->ofIdentifier($schedule->identifier())
+            ->first();
+
+        if (\is_null($target)) {
+            throw new \OutOfBoundsException(\sprintf('Schedule not found: %s', $schedule->identifier()->value()));
+        }
+
+        $repeat = \is_null($schedule->repeat()) ? null : \json_encode([
+            'type' => $schedule->repeat()->type()->name,
+            'interval' => $schedule->repeat()->interval(),
+        ]);
+
+        try {
+            $target->update([
+                'participants' => $schedule->participants()
+                    ->map
+                    ->value()
+                    ->toJson(),
+                'creator' => $schedule->creator()->value(),
+                'updater' => $schedule->updater()->value(),
+                'customer' => $schedule->customer()?->value(),
+                'title' => $schedule->content()->title(),
+                'description' => $schedule->content()->description(),
+                'start' => $schedule->date()->start()->toAtomString(),
+                'end' => $schedule->date()->end()->toAtomString(),
+                'status' => $schedule->status()->name,
+                'repeat' => $repeat,
+            ]);
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception, $schedule->identifier()->value());
+        }
     }
 
     /**
@@ -65,7 +113,7 @@ class EloquentScheduleRepository implements ScheduleRepository
     public function find(ScheduleIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-            ->where('identifier', $identifier->value())
+            ->ofIdentifier($identifier)
             ->first();
 
         if (\is_null($record)) {
@@ -81,42 +129,7 @@ class EloquentScheduleRepository implements ScheduleRepository
     public function list(Criteria $criteria): Enumerable
     {
         $records = $this->createQuery()
-            ->when(
-                !\is_null($criteria->status()),
-                fn (Builder $query): Builder => $query->where('status', $criteria->status()->name)
-            )
-            ->when(
-                !\is_null($criteria->date()),
-                function (Builder $query) use ($criteria): Builder {
-                    $date = $criteria->date();
-
-                    if (!\is_null($date->start())) {
-                        $query->where('start', '>=', $date->start()->toAtomString());
-                    }
-
-                    if (!\is_null($date->end())) {
-                        $query->where('end', '<=', $date->end()->toAtomString());
-                    }
-
-                    return $query;
-                }
-            )
-            ->when(
-                !\is_null($criteria->title()),
-                fn (Builder $query): Builder => $query->whereLike('title', $criteria->title())
-            )
-            ->get();
-
-        return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function ofUser(UserIdentifier $identifier): Enumerable
-    {
-        $records = $this->createQuery()
-            ->where('user', $identifier->value())
+            ->ofCriteria($criteria)
             ->get();
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
@@ -128,7 +141,7 @@ class EloquentScheduleRepository implements ScheduleRepository
     public function delete(ScheduleIdentifier $identifier): void
     {
         $target = $this->createQuery()
-            ->where('identifier', $identifier->value())
+            ->ofIdentifier($identifier)
             ->first();
 
         if (\is_null($target)) {
@@ -158,13 +171,34 @@ class EloquentScheduleRepository implements ScheduleRepository
     {
         return new Entity(
             identifier: new ScheduleIdentifier($record->identifier),
-            user: new UserIdentifier($record->user),
+            participants: $this->restoreParticipants($record),
+            creator: new UserIdentifier($record->creator),
+            updater: new UserIdentifier($record->updater),
             customer: $record->customer ? new CustomerIdentifier($record->customer) : null,
-            title: $record->title,
-            description: $record->description,
+            content: $this->restoreContent($record),
             date: $this->restoreDateTimeRange($record),
             status: $this->restoreStatus($record->status),
             repeat: $this->restoreRepeatFrequency($record->repeat),
+        );
+    }
+
+    /**
+     * レコードから参加者リストを復元する.
+     */
+    private function restoreParticipants(Record $record): Enumerable
+    {
+        return Collection::make(\json_decode($record->participants, true))
+            ->map(fn (string $value): UserIdentifier => new UserIdentifier($value));
+    }
+
+    /**
+     * レコードからスケジュール内容を復元する.
+     */
+    private function restoreContent(Record $record): ScheduleContent
+    {
+        return new ScheduleContent(
+            title: $record->title,
+            description: $record->description,
         );
     }
 

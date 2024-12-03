@@ -16,10 +16,14 @@ class ScheduleEncoder
     {
         return [
           'identifier' => $schedule->identifier()->value(),
-          'user' => $schedule->user()->value(),
+          'participants' => $schedule->participants()->map->value()->all(),
+          'creator' => $schedule->creator()->value(),
+          'updater' => $schedule->updater()->value(),
           'customer' => $schedule->customer()?->value(),
-          'title' => $schedule->title(),
-          'description' => $schedule->description(),
+          'content' => [
+            'title' => $schedule->content()->title(),
+            'description' => $schedule->content()->description()
+          ],
           'date' => [
             'start' => $schedule->date()->start()->toAtomString(),
             'end' => $schedule->date()->end()->toAtomString()

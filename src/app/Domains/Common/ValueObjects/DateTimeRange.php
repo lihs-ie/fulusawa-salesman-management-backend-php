@@ -54,6 +54,22 @@ class DateTimeRange
     }
 
     /**
+     * 指定した日時範囲が自身の範囲に含まれているか判定する.
+     */
+    public function includesRange(self $comparison): bool
+    {
+        if ($this->isGreaterThan($comparison->start())) {
+            return false;
+        }
+
+        if ($this->isLessThan($comparison->end())) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * 指定した日時が開始日時より前か判定する.
      */
     public function isGreaterThan(\DateTimeInterface $needle): bool

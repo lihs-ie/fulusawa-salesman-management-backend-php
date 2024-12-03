@@ -17,10 +17,12 @@ class AddRequest extends AbstractRequest
     {
         return [
           'identifier' => ['required', 'string', 'uuid'],
-          'user' => ['required', 'string', 'uuid'],
+          'participants' => ['required', 'array', 'between:1,10'],
+          'participants.*' => ['required', 'string', 'uuid'],
+          'creator' => ['required', 'string', 'uuid'],
+          'updater' => ['required', 'string', 'uuid'],
           'customer' => ['nullable', 'string', 'uuid'],
-          'title' => ['required', 'string', 'max:255'],
-          'description' => ['nullable', 'string', 'max:1000'],
+          'content' => ['required', new Rules\Schedule\ScheduleContent()],
           'date' => ['required', new Rules\Common\DateTimeRange()],
           'status' => ['required', new Rules\Schedule\ScheduleStatus()],
           'repeatFrequency' => ['nullable', new Rules\Schedule\RepeatFrequency()],
