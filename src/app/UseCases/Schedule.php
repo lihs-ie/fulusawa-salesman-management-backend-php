@@ -8,12 +8,13 @@ use App\Domains\Schedule\ScheduleRepository;
 use App\Domains\Schedule\ValueObjects\Criteria;
 use App\Domains\Schedule\ValueObjects\FrequencyType;
 use App\Domains\Schedule\ValueObjects\RepeatFrequency;
+use App\Domains\Schedule\ValueObjects\ScheduleContent;
 use App\Domains\Schedule\ValueObjects\ScheduleIdentifier;
 use App\Domains\Schedule\ValueObjects\ScheduleStatus;
 use App\Domains\User\ValueObjects\UserIdentifier;
 use App\UseCases\Factories\CommonDomainFactory;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
-use Ramsey\Uuid\Uuid;
 
 /**
  * スケジュールユースケース
@@ -31,39 +32,80 @@ class Schedule
      * スケジュールを永続化する
      *
      * @param string $identifier
-     * @param string $user
+     * @param array $participants
+     * @param string $creator
+     * @param string $updater
      * @param string|null $customer
-     * @param string $title
-     * @param string|null $description
+     * @param array $content
      * @param array $date
      * @param string $status
      * @param array $repeatFrequency
      * @return void
      */
-    public function persist(
+    public function add(
         string $identifier,
-        string $user,
+        array $participants,
+        string $creator,
+        string $updater,
         string|null $customer,
-        string $title,
-        string|null $description,
+        array $content,
         array $date,
         string $status,
         array|null $repeatFrequency
     ): void {
-        $customerValue = \is_null($customer) ? Uuid::uuid7()->toString() : $customer;
-
         $entity = new Entity(
             identifier: new ScheduleIdentifier($identifier),
-            user: new UserIdentifier($user),
-            customer: \is_null($customer) ? null : new CustomerIdentifier($customerValue),
-            title: $title,
-            description: $description,
+            participants: $this->extractParticipants($participants),
+            creator: new UserIdentifier($creator),
+            updater: new UserIdentifier($updater),
+            customer: \is_null($customer) ? null : new CustomerIdentifier($customer),
+            content: $this->extractScheduleContent($content),
             date: $this->extractDateTimeRange($date),
             status: $this->convertStatus($status),
             repeat: $repeatFrequency ? $this->extractRepeatFrequency($repeatFrequency) : null
         );
 
-        $this->repository->persist($entity);
+        $this->repository->add($entity);
+    }
+
+    /**
+     * スケジュールを更新する
+     *
+     * @param string $identifier
+     * @param array $participants
+     * @param string $creator
+     * @param string $updater
+     * @param string|null $customer
+     * @param array $content
+     * @param array $date
+     * @param string $status
+     * @param array|null $repeatFrequency
+     * @return void
+     */
+    public function update(
+        string $identifier,
+        array $participants,
+        string $creator,
+        string $updater,
+        string|null $customer,
+        array $content,
+        array $date,
+        string $status,
+        array|null $repeatFrequency
+    ): void {
+        $entity = new Entity(
+            identifier: new ScheduleIdentifier($identifier),
+            participants: $this->extractParticipants($participants),
+            creator: new UserIdentifier($creator),
+            updater: new UserIdentifier($updater),
+            customer: \is_null($customer) ? null : new CustomerIdentifier($customer),
+            content: $this->extractScheduleContent($content),
+            date: $this->extractDateTimeRange($date),
+            status: $this->convertStatus($status),
+            repeat: $repeatFrequency ? $this->extractRepeatFrequency($repeatFrequency) : null
+        );
+
+        $this->repository->update($entity);
     }
 
     /**
@@ -86,17 +128,6 @@ class Schedule
     public function list(array $conditions): Enumerable
     {
         return $this->repository->list($this->createCriteria($conditions));
-    }
-
-    /**
-     * ユーザーのスケジュール一覧を取得する
-     *
-     * @param string $user
-     * @return Enumerable<Schedule>
-     */
-    public function ofUser(string $user): Enumerable
-    {
-        return $this->repository->ofUser(new UserIdentifier($user));
     }
 
     /**
@@ -123,6 +154,32 @@ class Schedule
             ScheduleStatus::IN_PROGRESS->name => ScheduleStatus::IN_PROGRESS,
             ScheduleStatus::COMPLETED->name => ScheduleStatus::COMPLETED,
         };
+    }
+
+    /**
+     * 配列から参加者リストを生成する
+     *
+     * @param array $participants
+     * @return Enumerable
+     */
+    private function extractParticipants(array $participants): Enumerable
+    {
+        return Collection::make($participants)
+            ->map(fn (string $participant): UserIdentifier => new UserIdentifier($participant));
+    }
+
+    /**
+     * 配列からスケジュール内容を生成する
+     *
+     * @param array $content
+     * @return ScheduleContent
+     */
+    private function extractScheduleContent(array $content): ScheduleContent
+    {
+        return new ScheduleContent(
+            title: $this->extractString($content, 'title'),
+            description: $this->extractString($content, 'description')
+        );
     }
 
     /**
@@ -160,10 +217,14 @@ class Schedule
         $date = isset($conditions['date']) ?
             $this->extractDateTimeRange($this->extractArray($conditions, 'date')) : null;
 
+        $user = isset($conditions['user']) ?
+            new UserIdentifier($this->extractString($conditions, 'user')) : null;
+
         return new Criteria(
             status: $status,
             date: $date,
-            title: $this->extractString($conditions, 'title')
+            title: $this->extractString($conditions, 'title'),
+            user: $user
         );
     }
 }

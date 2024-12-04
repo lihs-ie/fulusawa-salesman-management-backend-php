@@ -31,12 +31,13 @@ class ScheduleController extends Controller
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->add(
                 identifier: $parameters['identifier'],
-                user: $parameters['user'],
+                participants: $parameters['participants'],
+                creator: $parameters['creator'],
+                updater: $parameters['updater'],
                 customer: $parameters['customer'],
-                title: $parameters['title'],
-                description: $parameters['description'],
+                content: $parameters['content'],
                 date: $parameters['date'],
                 status: $parameters['status'],
                 repeatFrequency: $parameters['repeatFrequency'],
@@ -59,12 +60,13 @@ class ScheduleController extends Controller
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->update(
                 identifier: $parameters['identifier'],
-                user: $parameters['user'],
+                participants: $parameters['participants'],
+                creator: $parameters['creator'],
+                updater: $parameters['updater'],
                 customer: $parameters['customer'],
-                title: $parameters['title'],
-                description: $parameters['description'],
+                content: $parameters['content'],
                 date: $parameters['date'],
                 status: $parameters['status'],
                 repeatFrequency: $parameters['repeatFrequency'],
@@ -113,9 +115,9 @@ class ScheduleController extends Controller
             $schedules = $useCase->list($parameters);
 
             return [
-              'schedules' => $schedules->map(
-                  fn (Schedule $schedule): array => $encoder->encode($schedule)
-              )->all(),
+                'schedules' => $schedules->map(
+                    fn (Schedule $schedule): array => $encoder->encode($schedule)
+                )->all(),
             ];
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestHttpException($exception->getMessage());

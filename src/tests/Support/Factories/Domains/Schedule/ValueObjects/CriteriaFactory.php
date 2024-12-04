@@ -5,6 +5,7 @@ namespace Tests\Support\Factories\Domains\Schedule\ValueObjects;
 use App\Domains\Common\ValueObjects\DateTimeRange;
 use App\Domains\Schedule\ValueObjects\Criteria;
 use App\Domains\Schedule\ValueObjects\ScheduleStatus;
+use App\Domains\User\ValueObjects\UserIdentifier;
 use Illuminate\Support\Str;
 use Tests\Support\DependencyBuilder;
 use Tests\Support\DependencyFactory;
@@ -25,6 +26,7 @@ class CriteriaFactory extends DependencyFactory
                 status: $overrides['status'] ?? $builder->create(ScheduleStatus::class, $seed, $overrides),
                 date: $overrides['date'] ?? $builder->create(DateTimeRange::class, $seed, $overrides),
                 title: $overrides['title'] ?? Str::random(\mt_rand(\abs($seed) % 10, 255)),
+                user: $overrides['user'] ?? $builder->create(UserIdentifier::class, $seed, $overrides),
             );
         }
 
@@ -32,6 +34,7 @@ class CriteriaFactory extends DependencyFactory
             status: $overrides['status'] ?? null,
             date: $overrides['date'] ?? null,
             title: $overrides['title'] ?? null,
+            user: $overrides['user'] ?? null,
         );
     }
 
@@ -48,6 +51,7 @@ class CriteriaFactory extends DependencyFactory
             status: $overrides['status'] ?? $instance->status(),
             date: $overrides['date'] ?? $instance->date(),
             title: $overrides['title'] ?? $instance->title(),
+            user: $overrides['user'] ?? $instance->user(),
         );
     }
 }

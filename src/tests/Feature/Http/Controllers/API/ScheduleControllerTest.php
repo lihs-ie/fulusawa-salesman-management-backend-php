@@ -78,9 +78,16 @@ class ScheduleControllerTest extends TestCase
         $record = $this->records->random();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'user' => $this->builder()->create(UserIdentifier::class, null, [
-            'value' => $record->user,
-          ]),
+            'participants' => Collection::make(\json_decode($record->participants))
+                ->map(fn (string $value): UserIdentifier => $this->builder()->create(UserIdentifier::class, null, [
+                    'value' => $value,
+                ])),
+            'creator' => $this->builder()->create(UserIdentifier::class, null, [
+                'value' => $record->creator,
+            ]),
+            'updater' => $this->builder()->create(UserIdentifier::class, null, [
+                'value' => $record->updater,
+            ]),
         ]);
 
         $payload = $this->encoder->encode($entity);
@@ -113,12 +120,19 @@ class ScheduleControllerTest extends TestCase
         $record = $this->records->random();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(ScheduleIdentifier::class, null, [
-            'value' => $record->identifier,
-          ]),
-          'user' => $this->builder()->create(UserIdentifier::class, null, [
-            'value' => $record->user,
-          ]),
+            'identifier' => $this->builder()->create(ScheduleIdentifier::class, null, [
+                'value' => $record->identifier,
+            ]),
+            'participants' => Collection::make(\json_decode($record->participants))
+                ->map(fn (string $value): UserIdentifier => $this->builder()->create(UserIdentifier::class, null, [
+                    'value' => $value,
+                ])),
+            'creator' => $this->builder()->create(UserIdentifier::class, null, [
+                'value' => $this->records->random()->creator,
+            ]),
+            'updater' => $this->builder()->create(UserIdentifier::class, null, [
+                'value' => $this->records->random()->updater,
+            ]),
         ]);
 
         $payload = $this->encoder->encode($entity);
@@ -134,10 +148,20 @@ class ScheduleControllerTest extends TestCase
 
     /**
      * @testdox testUpdateFailureReturnsNotFoundWithMissingIdentifier スケジュール更新APIで存在しない識別子を与えたとき404エラーを返すこと.
+     * @dataProvider provideRole
      */
-    public function testUpdateFailureReturnsNotFoundWithMissingIdentifier(): void
+    public function testUpdateFailureReturnsNotFoundWithMissingIdentifier(Role $role): void
     {
-        $this->markTestSkipped('persistメソッドをaddとupdateで分けた後に実装.');
+        $entity = $this->builder()->create(Entity::class);
+
+        $payload = $this->encoder->encode($entity);
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($payload, $accessToken),
+            $role
+        );
+
+        $response->assertNotFound();
     }
 
     /**
@@ -195,26 +219,36 @@ class ScheduleControllerTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsSuccessfulResponse スケジュール一覧取得APIでスケジュール一覧を取得できること.
-     * @dataProvider provideListValues
+     * @dataProvider provideConditions
      */
-    public function testListSuccessReturnsSuccessfulResponse(array $conditions): void
+    public function testListSuccessReturnsSuccessfulResponse(\Closure $closure): void
     {
+        $conditions = $closure($this);
+
         $filtered = $this->records
-          ->when(isset($conditions['status']), fn (Enumerable $records): Enumerable => $records->where('status', $conditions['status']))
-          ->when(
-              isset($conditions['date']) && !\is_null($conditions['date']['start']),
-              fn (Enumerable $records): Enumerable => $records->where('start', '>=', $conditions['date']['start'])
-          )
-          ->when(
-              isset($conditions['date']) && !\is_null($conditions['date']['end']),
-              fn (Enumerable $records): Enumerable => $records->where('end', '<=', $conditions['date']['end'])
-          );
+            ->when(isset($conditions['status']), fn (Enumerable $records): Enumerable => $records->where('status', $conditions['status']))
+            ->when(
+                isset($conditions['date']) && !\is_null($conditions['date']['start']),
+                fn (Enumerable $records): Enumerable => $records->where('start', '>=', $conditions['date']['start'])
+            )
+            ->when(
+                isset($conditions['date']) && !\is_null($conditions['date']['end']),
+                fn (Enumerable $records): Enumerable => $records->where('end', '<=', $conditions['date']['end'])
+            )
+            ->when(
+                isset($conditions['title']),
+                fn (Enumerable $records): Enumerable => $records->filter(fn (Record $record): bool => \str_contains($record->title, $conditions['title']))
+            )
+            ->when(
+                isset($conditions['user']),
+                fn (Enumerable $records): Enumerable => $records->filter(fn (Record $record): bool => \in_array($conditions['user'], \json_decode($record->participants)))
+            );
 
         $expected = [
-          'schedules' => $filtered
-            ->map(fn (Record $record): array => $this->createFindExpectedResult($record))
-            ->values()
-            ->all(),
+            'schedules' => $filtered
+                ->map(fn (Record $record): array => $this->createFindExpectedResult($record))
+                ->values()
+                ->all(),
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -223,6 +257,29 @@ class ScheduleControllerTest extends TestCase
 
         $response->assertSuccessful();
         $response->assertJson($expected);
+    }
+
+
+    /**
+     * スケジュール一覧取得APIで使用する値を提供するプロパイダ.
+     */
+    public static function provideConditions(): \Generator
+    {
+        yield 'empty' => [fn (): array => []];
+
+        yield 'status' => [fn (): array =>
+        ['status' => Collection::make(ScheduleStatus::cases())->random()->name]];
+
+        yield 'date' => [fn (): array => [
+            'date' => [
+                'start' => CarbonImmutable::yesterday()->toAtomString(),
+                'end' => CarbonImmutable::tomorrow()->toAtomString()
+            ],
+        ]];
+
+        yield 'user' => [fn (self $self): array => [
+            'user' => Collection::make(json_decode($self->records->random()->participants))->random(),
+        ]];
     }
 
     /**
@@ -274,23 +331,6 @@ class ScheduleControllerTest extends TestCase
         $response = $this->hitDeleteAPI(Uuid::uuid7()->toString());
 
         $response->assertUnauthorized();
-    }
-
-    /**
-     * スケジュール一覧取得APIで使用する値を提供するプロパイダ.
-     */
-    public static function provideListValues(): \Generator
-    {
-        yield 'empty' => [[]];
-
-        yield 'status' => [['status' => Collection::make(ScheduleStatus::cases())->random()->name]];
-
-        yield 'date' => [[
-          'date' => [
-            'start' => CarbonImmutable::yesterday()->toAtomString(),
-            'end' => CarbonImmutable::tomorrow()->toAtomString()
-          ],
-        ]];
     }
 
     /**
@@ -369,16 +409,18 @@ class ScheduleControllerTest extends TestCase
     private function assertPersisted(array $payload): void
     {
         $this->assertDatabaseHas('schedules', [
-          'identifier' => $payload['identifier'],
-          'user' => $payload['user'],
-          'customer' => $payload['customer'],
-          'title' => $payload['title'],
-          'description' => $payload['description'],
-          'start' => $payload['date']['start'],
-          'end' => $payload['date']['end'],
-          'status' => $payload['status'],
-          'repeat' => \is_null($payload['repeatFrequency']) ?
-            null : \json_encode($payload['repeatFrequency']),
+            'identifier' => $payload['identifier'],
+            'participants' => \json_encode($payload['participants']),
+            'creator' => $payload['creator'],
+            'updater' => $payload['updater'],
+            'customer' => $payload['customer'],
+            'title' => $payload['content']['title'],
+            'description' => $payload['content']['description'],
+            'start' => $payload['date']['start'],
+            'end' => $payload['date']['end'],
+            'status' => $payload['status'],
+            'repeat' => \is_null($payload['repeatFrequency']) ?
+                null : \json_encode($payload['repeatFrequency']),
         ]);
     }
 
@@ -388,18 +430,22 @@ class ScheduleControllerTest extends TestCase
     private function createFindExpectedResult(Record $record): array
     {
         return [
-          'identifier' => $record->identifier,
-          'user' => $record->user,
-          'customer' => $record->customer,
-          'title' => $record->title,
-          'description' => $record->description,
-          'date' => [
-            'start' => $record->start->format(\DATE_ATOM),
-            'end' => $record->end->format(\DATE_ATOM),
-          ],
-          'status' => $record->status,
-          'repeatFrequency' => \is_null($record->repeat) ?
-            null : \json_decode($record->repeat),
+            'identifier' => $record->identifier,
+            'participants' => \json_decode($record->participants),
+            'creator' => $record->creator,
+            'updater' => $record->updater,
+            'customer' => $record->customer,
+            'content' => [
+                'title' => $record->title,
+                'description' => $record->description,
+            ],
+            'date' => [
+                'start' => $record->start->format(\DATE_ATOM),
+                'end' => $record->end->format(\DATE_ATOM),
+            ],
+            'status' => $record->status,
+            'repeatFrequency' => \is_null($record->repeat) ?
+                null : \json_decode($record->repeat),
         ];
     }
 }

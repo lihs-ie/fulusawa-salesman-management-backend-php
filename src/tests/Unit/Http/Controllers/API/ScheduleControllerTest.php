@@ -80,9 +80,9 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload);
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload);
 
         $request = $this->createJsonRequest(
             class: AddRequest::class,
@@ -106,10 +106,10 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException());
 
         $request = $this->createJsonRequest(
             class: AddRequest::class,
@@ -132,10 +132,10 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \UnexpectedValueException());
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \UnexpectedValueException());
 
         $request = $this->createJsonRequest(
             class: AddRequest::class,
@@ -160,9 +160,9 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload);
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload);
 
         $request = $this->createJsonRequest(
             class: UpdateRequest::class,
@@ -189,10 +189,10 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException());
 
         $request = $this->createJsonRequest(
             class: UpdateRequest::class,
@@ -218,10 +218,10 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \UnexpectedValueException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \UnexpectedValueException());
 
         $request = $this->createJsonRequest(
             class: UpdateRequest::class,
@@ -245,10 +245,10 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \OutOfBoundsException());
 
         $request = $this->createJsonRequest(
             class: UpdateRequest::class,
@@ -272,10 +272,10 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($expected->identifier()->value())
-          ->willReturn($expected);
+            ->expects($this->once())
+            ->method('find')
+            ->with($expected->identifier()->value())
+            ->willReturn($expected);
 
         $request = $this->createGetRequest(
             class: FindRequest::class,
@@ -299,10 +299,10 @@ class ScheduleControllerTest extends TestCase
     {
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->with($conditions)
-          ->willReturn($this->instances);
+            ->expects($this->once())
+            ->method('list')
+            ->with($conditions)
+            ->willReturn($this->instances);
 
         $request = $this->createGetRequest(class: ListRequest::class, query: $conditions);
 
@@ -311,12 +311,12 @@ class ScheduleControllerTest extends TestCase
         $actual = $controller->list($request, $useCase, $this->encoder);
 
         Collection::make($this->instances)
-          ->zip(Collection::make($actual['schedules']))
-          ->eachSpread(function (?Schedule $expected, ?array $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertNotNull($actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip(Collection::make($actual['schedules']))
+            ->eachSpread(function (?Schedule $expected, ?array $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertNotNull($actual);
+                $this->assertEntity($expected, $actual);
+            });
     }
 
     /**
@@ -326,9 +326,9 @@ class ScheduleControllerTest extends TestCase
     {
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('list')
+            ->willThrowException(new \InvalidArgumentException());
 
         $request = $this->createGetRequest(class: ListRequest::class);
 
@@ -348,9 +348,9 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($instance->identifier()->value());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($instance->identifier()->value());
 
         $request = $this->createJsonRequest(
             class: DeleteRequest::class,
@@ -375,10 +375,10 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($target->identifier()->value())
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($target->identifier()->value())
+            ->willThrowException(new \InvalidArgumentException());
 
         $request = $this->createJsonRequest(
             class: DeleteRequest::class,
@@ -402,10 +402,10 @@ class ScheduleControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($target->identifier()->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($target->identifier()->value())
+            ->willThrowException(new \OutOfBoundsException());
 
         $request = $this->createJsonRequest(
             class: DeleteRequest::class,
@@ -430,8 +430,8 @@ class ScheduleControllerTest extends TestCase
         yield 'status' => [['status' => ScheduleStatus::IN_COMPLETE->name]];
 
         yield 'date' => [['date' => [
-          'start' => CarbonImmutable::now()->toAtomString(),
-          'end' => CarbonImmutable::now()->addDay()->toAtomString()
+            'start' => CarbonImmutable::now()->toAtomString(),
+            'end' => CarbonImmutable::now()->addDay()->toAtomString()
         ]]];
     }
 
@@ -452,10 +452,16 @@ class ScheduleControllerTest extends TestCase
     private function assertEntity(Schedule $expected, array $actual): void
     {
         $this->assertSame($expected->identifier()->value(), $actual['identifier']);
-        $this->assertSame($expected->user()->value(), $actual['user']);
+        $this->assertIsArray($actual['participants']);
+        $this->assertSame($expected->participants()->map->value()->all(), $actual['participants']);
+
+        $this->assertSame($expected->creator()->value(), $actual['creator']);
+        $this->assertSame($expected->updater()->value(), $actual['updater']);
         $this->assertSame($expected->customer()?->value(), $actual['customer']);
-        $this->assertSame($expected->title(), $actual['title']);
-        $this->assertSame($expected->description(), $actual['description']);
+
+        $this->assertIsArray($actual['content']);
+        $this->assertSame($expected->content()->title(), $actual['content']['title']);
+        $this->assertSame($expected->content()->description(), $actual['content']['description']);
 
         $this->assertIsArray($actual['date']);
         $this->assertSame($expected->date()->start()->toAtomString(), $actual['date']['start']);
