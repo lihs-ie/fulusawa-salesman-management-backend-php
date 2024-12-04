@@ -4,14 +4,15 @@ namespace Tests\Unit\UseCases;
 
 use App\Domains\TransactionHistory\Entities\TransactionHistory as Entity;
 use App\Domains\TransactionHistory\TransactionHistoryRepository;
-use App\Domains\TransactionHistory\ValueObjects\TransactionType;
-use App\UseCases\Factories\CommonDomainFactory;
+use App\Domains\TransactionHistory\ValueObjects\Criteria;
+use App\Domains\TransactionHistory\ValueObjects\Criteria\Sort;
+use App\Domains\TransactionHistory\ValueObjects\TransactionHistoryIdentifier;
+use App\Exceptions\ConflictException;
 use App\UseCases\TransactionHistory as UseCase;
 use Illuminate\Support\Enumerable;
 use Tests\Support\Assertions\NullableValueComparable;
 use Tests\Support\DependencyBuildable;
 use Tests\TestCase;
-use Tests\Unit\UseCases\PersistUseCaseTest;
 
 /**
  * @group unit
@@ -42,9 +43,9 @@ class TransactionHistoryTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnCreate persistメソッドで新規の取引履歴を永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドで取引履歴を永続化できること.
      */
-    public function testPersistSuccessInCaseOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $expected = $this->builder()->create(Entity::class);
 
@@ -52,7 +53,7 @@ class TransactionHistoryTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->add(
             identifier: $parameters['identifier'],
             customer: $parameters['customer'],
             user: $parameters['user'],
@@ -65,19 +66,46 @@ class TransactionHistoryTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnUpdate persistメソッドで既存の取引履歴を上書きして永続化できること.
+     * @testdox testAddFailureThrowsConflictExceptionWithDuplicateIdentifier addメソッドで既存の取引履歴と同じ識別子を持つ取引履歴を追加しようとしたとき例外が発生すること.
      */
-    public function testPersistSuccessInCaseOnUpdate(): void
+    public function testAddFailureThrowsConflictExceptionWithDuplicateIdentifier(): void
     {
         $target = $this->instances->random();
 
-        $expected = $this->builder()->create(Entity::class, null, ['identifier' => $target->identifier()]);
+        $parameters = $this->createParametersFromEntity($target);
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $this->expectException(ConflictException::class);
+
+        $useCase->add(
+            identifier: $parameters['identifier'],
+            customer: $parameters['customer'],
+            user: $parameters['user'],
+            type: $parameters['type'],
+            description: $parameters['description'],
+            date: $parameters['date'],
+        );
+    }
+
+    /**
+     * @testdox testUpdateSuccessPersistEntity updateメソッドで取引履歴を更新できること.
+     */
+    public function testUpdateSuccessPersistEntity(): void
+    {
+        $target = $this->instances->random();
+
+        $expected = $this->builder()->create(
+            Entity::class,
+            null,
+            ['identifier' => $target->identifier()]
+        );
 
         [$useCase, $persisted] = $this->createPersistUseCase();
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->update(
             identifier: $parameters['identifier'],
             customer: $parameters['customer'],
             user: $parameters['user'],
@@ -90,9 +118,9 @@ class TransactionHistoryTest extends TestCase
     }
 
     /**
-     * @testdox testFindSuccess findメソッドで取引履歴を取得できること.
+     * @testdox testFindSuccessReturnsEntity findメソッドで取引履歴を取得できること.
      */
-    public function testFindSuccess(): void
+    public function testFindSuccessReturnsEntity(): void
     {
         $expected = $this->instances->random();
 
@@ -104,15 +132,19 @@ class TransactionHistoryTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccess listメソッドで取引履歴一覧を取得できること.
+     * @testdox testListSuccessReturnsEntities listメソッドで取引履歴一覧を取得できること.
+     * 
+     * @dataProvider provideCriteria
      */
-    public function testListSuccess(): void
+    public function testListSuccessReturnsEntities(\Closure $closure): void
     {
-        $expecteds = clone $this->instances;
+        $criteria = $closure($this);
+
+        $expecteds = $this->createListExpected($criteria);
 
         [$useCase] = $this->createPersistUseCase();
 
-        $actuals = $useCase->list();
+        $actuals = $useCase->list($this->deflateCriteria($criteria));
 
         $expecteds
             ->zip($actuals)
@@ -124,9 +156,59 @@ class TransactionHistoryTest extends TestCase
     }
 
     /**
+     * 検索条件を提供するプロバイダ.
+     */
+    public static function provideCriteria(): \Generator
+    {
+        yield 'empty' => [
+            fn(self $self): Criteria => $self->builder()->create(Criteria::class)
+        ];
+
+        yield 'user' => [
+            fn(self $self): Criteria => $self->builder()->create(
+                Criteria::class,
+                null,
+                ['user' => $self->instances->random()->user()]
+            )
+        ];
+
+        yield 'customer' => [
+            fn(self $self): Criteria => $self->builder()->create(
+                Criteria::class,
+                null,
+                ['customer' => $self->instances->random()->customer()]
+            )
+        ];
+
+        yield 'sort' => [
+            fn(self $self): Criteria => $self->builder()->create(
+                Criteria::class,
+                null,
+                ['sort' => $self->builder()->create(Sort::class)]
+            )
+        ];
+
+        yield 'fulfilled' => [
+            function (self $self): Criteria {
+                $entity = $self->instances->random();
+
+                return $self->builder()->create(
+                    Criteria::class,
+                    null,
+                    [
+                        'user' => $entity->user(),
+                        'customer' => $entity->customer(),
+                        'sort' => $self->builder()->create(Sort::class),
+                    ]
+                );
+            }
+        ];
+    }
+
+    /**
      * @testdox testDeleteSuccess deleteメソッドで指定した取引履歴を削除できること.
      */
-    public function testDeleteSuccess(): void
+    public function testDeleteSuccessRemoveEntity(): void
     {
         [$removed, $onRemove] = $this->createRemoveHandler();
 
@@ -148,49 +230,17 @@ class TransactionHistoryTest extends TestCase
     }
 
     /**
-     * @testdox testOfUserSuccessReturnsEntities ofCustomerメソッドで指定した顧客の取引履歴一覧を取得できること.
+     * @testdox testDeleteFailureThrowsOutOfBoundsExceptionWithMissingIdentifier deleteメソッドで存在しない取引履歴を削除しようとしたとき例外が発生すること.
      */
-    public function testOfUserSuccessReturnsEntities(): void
+    public function testDeleteFailureThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
     {
-        $user = $this->instances->random()->user();
-
-        $expecteds = $this->instances
-            ->filter(fn (Entity $entity): bool => $entity->user()->equals($user));
+        $identifier = $this->builder()->create(TransactionHistoryIdentifier::class);
 
         [$useCase] = $this->createPersistUseCase();
 
-        $actuals = $useCase->ofUser($user->value());
+        $this->expectException(\OutOfBoundsException::class);
 
-        $expecteds
-            ->zip($actuals)
-            ->eachSpread(function (Entity $expected, $actual): void {
-                $this->assertNotNull($expected);
-                $this->assertInstanceOf(Entity::class, $actual);
-                $this->assertEntity($expected, $actual);
-            });
-    }
-
-    /**
-     * @testdox testOfCustomerSuccessReturnsEntities ofCustomerメソッドで指定した顧客の取引履歴一覧を取得できること.
-     */
-    public function testOfCustomerSuccessReturnsEntities(): void
-    {
-        $customer = $this->instances->random()->customer();
-
-        $expecteds = $this->instances
-            ->filter(fn (Entity $entity): bool => $entity->customer()->equals($customer));
-
-        [$useCase] = $this->createPersistUseCase();
-
-        $actuals = $useCase->ofCustomer($customer->value());
-
-        $expecteds
-            ->zip($actuals)
-            ->eachSpread(function (Entity $expected, $actual): void {
-                $this->assertNotNull($expected);
-                $this->assertInstanceOf(Entity::class, $actual);
-                $this->assertEntity($expected, $actual);
-            });
+        $useCase->delete($identifier->value());
     }
 
     /**
@@ -243,7 +293,7 @@ class TransactionHistoryTest extends TestCase
         $this->assertNullOr(
             $expected->description(),
             $actual->description(),
-            fn ($expected, $actual) => $this->assertTrue($expected === $actual)
+            fn($expected, $actual) => $this->assertTrue($expected === $actual)
         );
         $this->assertTrue($expected->date()->toAtomString() === $actual->date()->toAtomString());
     }
@@ -265,25 +315,41 @@ class TransactionHistoryTest extends TestCase
             'identifier' => $entity->identifier()->value(),
             'customer' => $entity->customer()->value(),
             'user' => $entity->user()->value(),
-            'type' => $this->convertTransactionType($entity->type()),
+            'type' => $entity->type()->name,
             'description' => $entity->description(),
             'date' => $entity->date()->toAtomString(),
         ];
     }
 
     /**
-     * 取引履歴種別を文字列の値に変換する.
+     * listメソッドの期待値を生成するへルパ.
      */
-    private function convertTransactionType(TransactionType $type): string
+    private function createListExpected(Criteria $criteria): Enumerable
     {
-        return match ($type) {
-            TransactionType::MAINTENANCE => '1',
-            TransactionType::CLEANING => '2',
-            TransactionType::GRAVESTONE_INSTALLATION => '3',
-            TransactionType::GRAVESTONE_REMOVAL => '4',
-            TransactionType::GRAVESTONE_REPLACEMENT => '5',
-            TransactionType::GRAVESTONE_REPAIR => '6',
-            TransactionType::OTHER => '99',
-        };
+        return $this->instances
+            ->when(!\is_null($criteria->user()), fn(Enumerable $instances) => $instances->filter(
+                fn(Entity $entity): bool => $criteria->user()->equals($entity->user())
+            ))
+            ->when(!\is_null($criteria->customer()), fn(Enumerable $instances) => $instances->filter(
+                fn(Entity $entity): bool => $criteria->customer()->equals($entity->customer())
+            ))
+            ->when(!\is_null($criteria->sort()), fn(Enumerable $instances) => match ($criteria->sort()) {
+                Sort::CREATED_AT_ASC => $instances->sortBy(fn(Entity $entity): \DateTimeInterface => $entity->date()),
+                Sort::CREATED_AT_DESC => $instances->sortByDesc(fn(Entity $entity): \DateTimeInterface => $entity->date()),
+                Sort::UPDATED_AT_ASC => $instances->sortBy(fn(Entity $entity): \DateTimeInterface => $entity->date()),
+                Sort::UPDATED_AT_DESC => $instances->sortByDesc(fn(Entity $entity): \DateTimeInterface => $entity->date()),
+            });
+    }
+
+    /**
+     * 検索条件の配列を生成するへルパ.
+     */
+    private function deflateCriteria(Criteria $criteria): array
+    {
+        return [
+            'user' => $criteria->user()?->value(),
+            'customer' => $criteria->customer()?->value(),
+            'sort' => $criteria->sort()?->name,
+        ];
     }
 }

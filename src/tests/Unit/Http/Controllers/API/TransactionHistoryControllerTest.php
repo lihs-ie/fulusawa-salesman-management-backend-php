@@ -3,16 +3,19 @@
 namespace Tests\Unit\Http\Controllers\API;
 
 use App\Domains\TransactionHistory\Entities\TransactionHistory as Entity;
+use App\Domains\TransactionHistory\ValueObjects\Criteria\Sort;
 use App\Http\Controllers\API\TransactionHistoryController;
 use App\Http\Encoders\TransactionHistory\TransactionHistoryEncoder;
 use App\Http\Requests\API\TransactionHistory\AddRequest;
 use App\Http\Requests\API\TransactionHistory\DeleteRequest;
 use App\Http\Requests\API\TransactionHistory\FindRequest;
+use App\Http\Requests\API\TransactionHistory\ListRequest;
 use App\Http\Requests\API\TransactionHistory\UpdateRequest;
 use App\UseCases\TransactionHistory as UseCase;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
+use Ramsey\Uuid\Uuid;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\Support\DependencyBuildable;
@@ -27,6 +30,10 @@ use Tests\TestCase;
  * @group transactionhistory
  *
  * @coversNothing
+ *
+ * @SuppressWarnings(PHPMD.TooManyMethods)
+ *
+ * @internal
  */
 class TransactionHistoryControllerTest extends TestCase
 {
@@ -36,7 +43,7 @@ class TransactionHistoryControllerTest extends TestCase
     /**
      * テストに使用するインスタンス.
      */
-    private Enumerable|null $instances;
+    private ?Enumerable $instances;
 
     /**
      * テストに使用するエンコーダ.
@@ -75,9 +82,10 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload);
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -104,10 +112,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -133,10 +142,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \UnexpectedValueException());
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \UnexpectedValueException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -168,9 +178,10 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload);
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -203,10 +214,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -238,10 +250,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \UnexpectedValueException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \UnexpectedValueException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -273,10 +286,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -293,26 +307,55 @@ class TransactionHistoryControllerTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsResponse listメソッドに正常な値を与えたとき正常なレスポンスが返ること.
+     *
+     * @dataProvider provideConditions
      */
-    public function testListSuccessReturnsResponse(): void
+    public function testListSuccessReturnsResponse(array $conditions): void
     {
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->willReturn($this->instances);
+            ->expects($this->once())
+            ->method('list')
+            ->with($conditions)
+            ->willReturn($this->instances)
+        ;
+
+        $request = $this->createGetRequest(class: ListRequest::class, query: $conditions);
 
         $controller = new TransactionHistoryController();
 
-        $actual = $controller->list($useCase, $this->encoder);
+        $actual = $controller->list($request, $useCase, $this->encoder);
+
+        $this->assertCount($this->instances->count(), $actual['transactionHistories']);
 
         $this->instances
-          ->zip(Collection::make($actual['transactionHistories']))
-          ->eachSpread(function (?Entity $expected, ?array $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertNotNull($actual);
-              $this->assertEntity($expected, $actual);
-          });
+            ->zip(Collection::make($actual['transactionHistories']))
+            ->eachSpread(function (?Entity $expected, ?array $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertNotNull($actual);
+                $this->assertEntity($expected, $actual);
+            })
+        ;
+    }
+
+    /**
+     * 検索条件を提供するプロバイダ.
+     */
+    public static function provideConditions(): \Generator
+    {
+        yield 'empty' => [[]];
+
+        yield 'customer' => [['customer' => Uuid::uuid7()->toString()]];
+
+        yield 'user' => [['user' => Uuid::uuid7()->toString()]];
+
+        yield 'sort' => [['sort' => Collection::make(Sort::cases())->random()->name]];
+
+        yield 'fulfilled' => [[
+            'user' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'sort' => Collection::make(Sort::cases())->random()->name,
+        ]];
     }
 
     /**
@@ -324,10 +367,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($target->identifier()->value())
-          ->willReturn($target);
+            ->expects($this->once())
+            ->method('find')
+            ->with($target->identifier()->value())
+            ->willReturn($target)
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -350,10 +394,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($target->identifier()->value())
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('find')
+            ->with($target->identifier()->value())
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -376,10 +421,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($target->identifier()->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('find')
+            ->with($target->identifier()->value())
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -402,9 +448,10 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($target->identifier()->value());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($target->identifier()->value())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -429,10 +476,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($target->identifier()->value())
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($target->identifier()->value())
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -456,10 +504,11 @@ class TransactionHistoryControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($target->identifier()->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($target->identifier()->value())
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new TransactionHistoryController();
 
@@ -495,6 +544,6 @@ class TransactionHistoryControllerTest extends TestCase
         $this->assertSame($expected->user()->value(), $actual['user']);
         $this->assertSame($expected->type()->name, $actual['type']);
         $this->assertSame($expected->description(), $actual['description']);
-        $this->assertSame($expected->date()->toAtomString(), $actual['date']);
+        $this->assertSame($expected->date()->toDateString(), $actual['date']);
     }
 }

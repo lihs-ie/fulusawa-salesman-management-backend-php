@@ -5,6 +5,8 @@ namespace App\UseCases;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\TransactionHistory\Entities\TransactionHistory as Entity;
 use App\Domains\TransactionHistory\TransactionHistoryRepository;
+use App\Domains\TransactionHistory\ValueObjects\Criteria;
+use App\Domains\TransactionHistory\ValueObjects\Criteria\Sort;
 use App\Domains\TransactionHistory\ValueObjects\TransactionHistoryIdentifier;
 use App\Domains\TransactionHistory\ValueObjects\TransactionType;
 use App\Domains\User\ValueObjects\UserIdentifier;
@@ -19,13 +21,15 @@ class TransactionHistory
 {
     use CommonDomainFactory;
 
+    /**
+     * コンストラクタ.
+     */
     public function __construct(
         private readonly TransactionHistoryRepository $repository,
-    ) {
-    }
+    ) {}
 
     /**
-     * 取引履歴を永続化する
+     * 取引履歴を追加する
      *
      * @param string $identifier
      * @param string $customer
@@ -35,7 +39,7 @@ class TransactionHistory
      * @param string $date
      * @return void
      */
-    public function persist(
+    public function add(
         string $identifier,
         string $customer,
         string $user,
@@ -52,7 +56,38 @@ class TransactionHistory
             date: CarbonImmutable::parse($date),
         );
 
-        $this->repository->persist($entity);
+        $this->repository->add($entity);
+    }
+
+    /**
+     * 取引履歴を更新する
+     *
+     * @param string $identifier
+     * @param string $customer
+     * @param string $user
+     * @param string $type
+     * @param string|null $description
+     * @param string $date
+     * @return void
+     */
+    public function update(
+        string $identifier,
+        string $customer,
+        string $user,
+        string $type,
+        string|null $description,
+        string $date
+    ): void {
+        $entity = new Entity(
+            identifier: new TransactionHistoryIdentifier($identifier),
+            customer: new CustomerIdentifier($customer),
+            user: new UserIdentifier($user),
+            type: $this->convertTransactionType($type),
+            description: $description,
+            date: CarbonImmutable::parse($date),
+        );
+
+        $this->repository->update($entity);
     }
 
     /**
@@ -71,9 +106,9 @@ class TransactionHistory
      *
      * @return Enumerable<Entity>
      */
-    public function list(): Enumerable
+    public function list(array $conditions): Enumerable
     {
-        return $this->repository->list();
+        return $this->repository->list($this->inflateCriteria($conditions));
     }
 
     /**
@@ -85,28 +120,6 @@ class TransactionHistory
     public function delete(string $identifier): void
     {
         $this->repository->delete(new TransactionHistoryIdentifier($identifier));
-    }
-
-    /**
-     * ユーザー識別子を指定して取引履歴を取得する
-     *
-     * @param string $user
-     * @return Enumerable
-     */
-    public function ofUser(string $user): Enumerable
-    {
-        return $this->repository->ofUser(new UserIdentifier($user));
-    }
-
-    /**
-     * 顧客識別子を指定して取引履歴を取得する
-     *
-     * @param string $customer
-     * @return Enumerable
-     */
-    public function ofCustomer(string $customer): Enumerable
-    {
-        return $this->repository->ofCustomer(new CustomerIdentifier($customer));
     }
 
     /**
@@ -125,6 +138,41 @@ class TransactionHistory
             TransactionType::GRAVESTONE_REPLACEMENT->name => TransactionType::GRAVESTONE_REPLACEMENT,
             TransactionType::GRAVESTONE_REPAIR->name => TransactionType::GRAVESTONE_REPAIR,
             TransactionType::OTHER->name => TransactionType::OTHER,
+        };
+    }
+
+    /**
+     * 配列から検索条件を生成する
+     *
+     * @param array $conditions
+     * @return Criteria
+     */
+    private function inflateCriteria(array $conditions): Criteria
+    {
+        $user = isset($conditions['user']) ?
+            new UserIdentifier($this->extractString($conditions, 'user')) : null;
+
+        $customer = isset($conditions['customer']) ?
+            new CustomerIdentifier($this->extractString($conditions, 'customer')) : null;
+
+        return new Criteria(
+            user: $user,
+            customer: $customer,
+            sort: isset($conditions['sort']) ?
+                $this->convertSort($this->extractString($conditions, 'sort')) : null,
+        );
+    }
+
+    /**
+     * 文字列からソート条件を生成する
+     */
+    private function convertSort(string $sort): Sort
+    {
+        return match ($sort) {
+            Sort::CREATED_AT_ASC->name => Sort::CREATED_AT_ASC,
+            Sort::CREATED_AT_DESC->name => Sort::CREATED_AT_DESC,
+            Sort::UPDATED_AT_ASC->name => Sort::UPDATED_AT_ASC,
+            Sort::UPDATED_AT_DESC->name => Sort::UPDATED_AT_DESC,
         };
     }
 }

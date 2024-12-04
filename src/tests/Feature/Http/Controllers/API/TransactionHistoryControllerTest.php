@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Http\Controllers\API;
 
+use App\Domains\TransactionHistory\ValueObjects\Criteria\Sort;
 use App\Domains\User\ValueObjects\Role;
 use App\Http\Encoders\TransactionHistory\TransactionHistoryEncoder;
 use App\Infrastructures\TransactionHistory\Models\TransactionHistory as Record;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Illuminate\Testing\TestResponse;
 use Ramsey\Uuid\Uuid;
@@ -22,6 +24,10 @@ use Tests\TestCase;
  * @group transactionhistory
  *
  * @coversNothing
+ *
+ * @SuppressWarnings(PHPMD.TooManyMethods)
+ *
+ * @internal
  */
 class TransactionHistoryControllerTest extends TestCase
 {
@@ -33,7 +39,7 @@ class TransactionHistoryControllerTest extends TestCase
     /**
      * テストに使用するレコード.
      */
-    private Enumerable|null $records;
+    private ?Enumerable $records;
 
     /**
      * テストに使用するエンコーダ.
@@ -69,12 +75,12 @@ class TransactionHistoryControllerTest extends TestCase
         $record = $this->records->random();
 
         $payload = [
-          'identifier' => $record->identifier,
-          'user' => $record->user,
-          'customer' => $record->customer,
-          'type' => $record->type,
-          'description' => $record->description,
-          'date' => $record->date,
+            'identifier' => Uuid::uuid7()->toString(),
+            'user' => $record->user,
+            'customer' => $record->customer,
+            'type' => $record->type,
+            'description' => $record->description,
+            'date' => $record->date,
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -93,12 +99,12 @@ class TransactionHistoryControllerTest extends TestCase
         $record = $this->records->random();
 
         $payload = [
-          'identifier' => $record->identifier,
-          'user' => $record->user,
-          'customer' => $record->customer,
-          'type' => $record->type,
-          'description' => $record->description,
-          'date' => $record->date,
+            'identifier' => $record->identifier,
+            'user' => $record->user,
+            'customer' => $record->customer,
+            'type' => $record->type,
+            'description' => $record->description,
+            'date' => $record->date,
         ];
 
         $response = $this->hitAddAPI($payload);
@@ -114,12 +120,12 @@ class TransactionHistoryControllerTest extends TestCase
         $target = $this->records->random();
 
         $payload = [
-          'identifier' => $target->identifier,
-          'user' => $target->user,
-          'customer' => $target->customer,
-          'type' => $target->type,
-          'description' => $target->description,
-          'date' => $target->date,
+            'identifier' => $target->identifier,
+            'user' => $target->user,
+            'customer' => $target->customer,
+            'type' => $target->type,
+            'description' => $target->description,
+            'date' => $target->date,
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -135,7 +141,22 @@ class TransactionHistoryControllerTest extends TestCase
      */
     public function testUpdateFailureReturnsNotFoundResponse(): void
     {
-        $this->markTestSkipped('persistをaddとupdateを分けるように修正の後に実装');
+        $target = $this->records->random();
+
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'user' => $target->user,
+            'customer' => $target->customer,
+            'type' => $target->type,
+            'description' => $target->description,
+            'date' => $target->date,
+        ];
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($payload, $accessToken)
+        );
+
+        $response->assertNotFound();
     }
 
     /**
@@ -146,12 +167,12 @@ class TransactionHistoryControllerTest extends TestCase
         $target = $this->records->random();
 
         $payload = [
-          'identifier' => $target->identifier,
-          'user' => $target->user,
-          'customer' => $target->customer,
-          'type' => $target->type,
-          'description' => $target->description,
-          'date' => $target->date,
+            'identifier' => $target->identifier,
+            'user' => $target->user,
+            'customer' => $target->customer,
+            'type' => $target->type,
+            'description' => $target->description,
+            'date' => $target->date,
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -170,12 +191,12 @@ class TransactionHistoryControllerTest extends TestCase
         $target = $this->records->random();
 
         $payload = [
-          'identifier' => $target->identifier,
-          'user' => $target->user,
-          'customer' => $target->customer,
-          'type' => $target->type,
-          'description' => $target->description,
-          'date' => $target->date,
+            'identifier' => $target->identifier,
+            'user' => $target->user,
+            'customer' => $target->customer,
+            'type' => $target->type,
+            'description' => $target->description,
+            'date' => $target->date,
         ];
 
         $response = $this->hitUpdateAPI($payload);
@@ -185,6 +206,7 @@ class TransactionHistoryControllerTest extends TestCase
 
     /**
      * @testdox testFindSuccessReturnsSuccessfulResponse 取引履歴取得APIで取引履歴を取得できること.
+     *
      * @dataProvider provideRole
      */
     public function testFindSuccessReturnsSuccessfulResponse(Role $role): void
@@ -226,23 +248,51 @@ class TransactionHistoryControllerTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsSuccessfulResponse 取引履歴一覧取得APIで取引履歴一覧を取得できること.
-     * @dataProvider provideRole
+     *
+     * @dataProvider provideConditions
      */
-    public function testListSuccessReturnsSuccessfulResponse(Role $role): void
+    public function testListSuccessReturnsSuccessfulResponse(\Closure $closure): void
     {
+        $conditions = $closure($this);
+
         $response = $this->callAPIWithAuthentication(
-            fn (string $accessToken): TestResponse => $this->hitListAPI([], $accessToken),
-            $role
+            fn (string $accessToken): TestResponse => $this->hitListAPI($conditions, $accessToken),
         );
 
-        $expected = [
-          'transactionHistories' => $this->records
-            ->map(fn (Record $record): array => $this->createFindExpectedResult($record))
-            ->all()
-        ];
+        $expected = $this->createListExpectedResult($conditions);
 
         $response->assertSuccessful();
         $response->assertJson($expected);
+    }
+
+    /**
+     * 検索条件を提供するプロバイダ.
+     */
+    public static function provideConditions(): \Generator
+    {
+        yield 'empty' => [fn (self $self): array => []];
+
+        yield 'user' => [fn (self $self): array => [
+            'user' => $self->records->random()->user,
+        ]];
+
+        yield 'customer' => [fn (self $self): array => [
+            'customer' => $self->records->random()->customer,
+        ]];
+
+        yield 'sort' => [fn (): array => [
+            'sort' => Collection::make(Sort::cases())->random()->name,
+        ]];
+
+        yield 'fulfilled' => [function (self $self): array {
+            $record = $self->records->random();
+
+            return [
+                'user' => $record->user,
+                'customer' => $record->customer,
+                'sort' => Collection::make(Sort::cases())->random()->name,
+            ];
+        }];
     }
 
     /**
@@ -321,7 +371,7 @@ class TransactionHistoryControllerTest extends TestCase
     /**
      * 取引履歴追加APIを実行する.
      */
-    private function hitAddAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitAddAPI(array $payload, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'POST',
@@ -334,7 +384,7 @@ class TransactionHistoryControllerTest extends TestCase
     /**
      * 取引履歴更新APIを実行する.
      */
-    private function hitUpdateAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitUpdateAPI(array $payload, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'PUT',
@@ -347,8 +397,7 @@ class TransactionHistoryControllerTest extends TestCase
     /**
      * 取引履歴取得APIを実行する.
      */
-
-    private function hitFindAPI(string $identifier, string|null $accessToken = null): TestResponse
+    private function hitFindAPI(string $identifier, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
@@ -360,7 +409,7 @@ class TransactionHistoryControllerTest extends TestCase
     /**
      * 取引履歴一覧取得APIを実行する.
      */
-    private function hitListAPI(array $conditions = [], string|null $accessToken = null): TestResponse
+    private function hitListAPI(array $conditions = [], ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
@@ -372,7 +421,7 @@ class TransactionHistoryControllerTest extends TestCase
     /**
      * 取引履歴削除APIを実行する.
      */
-    private function hitDeleteAPI(string $identifier, string|null $accessToken = null): TestResponse
+    private function hitDeleteAPI(string $identifier, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'DELETE',
@@ -387,12 +436,12 @@ class TransactionHistoryControllerTest extends TestCase
     private function assertPersisted(array $payload): void
     {
         $this->assertDatabaseHas('transaction_histories', [
-          'identifier' => $payload['identifier'],
-          'user' => $payload['user'],
-          'customer' => $payload['customer'],
-          'type' => $payload['type'],
-          'description' => $payload['description'],
-          'date' => $payload['date'],
+            'identifier' => $payload['identifier'],
+            'user' => $payload['user'],
+            'customer' => $payload['customer'],
+            'type' => $payload['type'],
+            'description' => $payload['description'],
+            'date' => $payload['date'],
         ]);
     }
 
@@ -402,12 +451,42 @@ class TransactionHistoryControllerTest extends TestCase
     private function createFindExpectedResult(Record $record): array
     {
         return [
-          'identifier' => $record->identifier,
-          'user' => $record->user,
-          'customer' => $record->customer,
-          'type' => $record->type,
-          'description' => $record->description,
-          'date' => $record->date,
+            'identifier' => $record->identifier,
+            'user' => $record->user,
+            'customer' => $record->customer,
+            'type' => $record->type,
+            'description' => $record->description,
+            'date' => $record->date,
+        ];
+    }
+
+    /**
+     * 取引履歴一覧取得APIの期待結果を生成する.
+     */
+    private function createListExpectedResult(array $conditions): array
+    {
+        return [
+            'transactionHistories' => $this->records
+                ->when(
+                    isset($conditions['user']),
+                    fn (Enumerable $records) => $records->where('user', $conditions['user'])
+                )
+                ->when(
+                    isset($conditions['customer']),
+                    fn (Enumerable $records) => $records->where('customer', $conditions['customer'])
+                )
+                ->when(
+                    isset($conditions['sort']),
+                    fn (Enumerable $records) => match ($conditions['sort']) {
+                        Sort::CREATED_AT_ASC->name => $records->sortBy('created_at'),
+                        Sort::CREATED_AT_DESC->name => $records->sortByDesc('created_at'),
+                        Sort::UPDATED_AT_ASC->name => $records->sortBy('updated_at'),
+                        Sort::UPDATED_AT_DESC->name => $records->sortByDesc('updated_at'),
+                    }
+                )
+                ->values()
+                ->map(fn (Record $record): array => $this->createFindExpectedResult($record))
+                ->all(),
         ];
     }
 }

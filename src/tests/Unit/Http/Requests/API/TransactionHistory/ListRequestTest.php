@@ -2,8 +2,8 @@
 
 namespace Tests\Unit\Http\Requests\API\TransactionHistory;
 
-use App\Http\Requests\API\Schedule\ListRequest;
-use Carbon\CarbonImmutable;
+use App\Http\Requests\API\TransactionHistory\ListRequest;
+use Ramsey\Uuid\Uuid;
 use Tests\TestCase;
 use Tests\Unit\Http\Requests\API\QueryRequestTest;
 
@@ -14,6 +14,8 @@ use Tests\Unit\Http\Requests\API\QueryRequestTest;
  * @group transactionhistory
  *
  * @coversNothing
+ *
+ * @internal
  */
 class ListRequestTest extends TestCase
 {
@@ -33,11 +35,9 @@ class ListRequestTest extends TestCase
     protected function createDefaultQuery(): array
     {
         return [
-          'status' => 'IN_COMPLETE',
-          'date' => [
-            'start' => CarbonImmutable::now()->toAtomString(),
-            'end' => CarbonImmutable::now()->toAtomString()
-          ]
+            'user' => Uuid::uuid7()->toString(),
+            'customer' => Uuid::uuid7()->toString(),
+            'sort' => 'CREATED_AT_ASC',
         ];
     }
 
@@ -54,7 +54,20 @@ class ListRequestTest extends TestCase
      */
     protected function getValidQueryPatterns(): array
     {
-        return [];
+        return [
+            'user' => [
+                'null' => null,
+            ],
+            'customer' => [
+                'null' => null,
+            ],
+            'sort' => [
+                'created_at_desc' => 'CREATED_AT_DESC',
+                'updated_at_asc' => 'UPDATED_AT_ASC',
+                'updated_at_desc' => 'UPDATED_AT_DESC',
+                'null' => null,
+            ],
+        ];
     }
 
     /**
@@ -62,24 +75,7 @@ class ListRequestTest extends TestCase
      */
     protected function getValidRoutePatterns(): array
     {
-        return [
-          'status' => [
-            'completed' => 'COMPLETED',
-            'in_progress' => 'IN_PROGRESS',
-            'null' => null
-          ],
-          'date' => [
-            'null' => null,
-            'start null' => [
-              'start' => null,
-              'end' => CarbonImmutable::now()->toAtomString()
-            ],
-            'end null' => [
-              'start' => CarbonImmutable::now()->toAtomString(),
-              'end' => null
-            ],
-          ]
-        ];
+        return [];
     }
 
     /**
@@ -88,20 +84,18 @@ class ListRequestTest extends TestCase
     protected function getInvalidQueryPatterns(): array
     {
         return [
-          'status' => [
-            'invalid' => 'invalid',
-            'invalid type' => \mt_rand(1, 255),
-          ],
-          'date' => [
-            'invalid' => [
-              'start' => 'invalid',
-              'end' => 'invalid'
+            'user' => [
+                'invalid format' => 'invalid',
+                'invalid type' => \mt_rand(1, 255),
             ],
-            'start after end' => [
-              'start' => CarbonImmutable::now()->toAtomString(),
-              'end' => CarbonImmutable::now()->subSeconds(1)->toAtomString()
-            ]
-          ]
+            'customer' => [
+                'invalid format' => 'invalid',
+                'invalid type' => \mt_rand(1, 255),
+            ],
+            'sort' => [
+                'invalid format' => 'invalid',
+                'invalid type' => \mt_rand(1, 255),
+            ],
         ];
     }
 

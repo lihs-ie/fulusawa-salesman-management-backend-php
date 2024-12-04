@@ -12,12 +12,12 @@ class TransactionHistoryEncoder
     public function encode(TransactionHistory $history): array
     {
         return [
-          'identifier' => $history->identifier()->value(),
-          'customer' => $history->customer()->value(),
-          'user' => $history->user()->value(),
-          'type' => $history->type()->name,
-          'description' => $history->description(),
-          'date' => $history->date()->toDateString(),
+            'identifier' => $history->identifier()->value(),
+            'customer' => $history->customer()->value(),
+            'user' => $history->user()->value(),
+            'type' => $history->type()->name,
+            'description' => $history->description(),
+            'date' => $history->date()->toDateString(),
         ];
     }
 }

@@ -20,7 +20,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 
 /**
- * スケジュールリポジトリ
+ * スケジュールリポジトリ.
  */
 class EloquentScheduleRepository extends AbstractEloquentRepository implements ScheduleRepository
 {
@@ -28,12 +28,8 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
 
     /**
      * コンストラクタ.
-     *
-     * @param Record $builder
      */
-    public function __construct(private readonly Record $builder)
-    {
-    }
+    public function __construct(private readonly Record $builder) {}
 
     /**
      * {@inheritDoc}
@@ -62,7 +58,8 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
                     'end' => $schedule->date()->end()->toAtomString(),
                     'status' => $schedule->status()->name,
                     'repeat' => $repeat,
-                ]);
+                ])
+            ;
         } catch (\PDOException $exception) {
             $this->handlePDOException($exception, $schedule->identifier()->value());
         }
@@ -75,7 +72,8 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
     {
         $target = $this->createQuery()
             ->ofIdentifier($schedule->identifier())
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Schedule not found: %s', $schedule->identifier()->value()));
@@ -87,21 +85,22 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
         ]);
 
         try {
-            $target->update([
-                'participants' => $schedule->participants()
-                    ->map
-                    ->value()
-                    ->toJson(),
-                'creator' => $schedule->creator()->value(),
-                'updater' => $schedule->updater()->value(),
-                'customer' => $schedule->customer()?->value(),
-                'title' => $schedule->content()->title(),
-                'description' => $schedule->content()->description(),
-                'start' => $schedule->date()->start()->toAtomString(),
-                'end' => $schedule->date()->end()->toAtomString(),
-                'status' => $schedule->status()->name,
-                'repeat' => $repeat,
-            ]);
+            $target->participants = $schedule->participants()
+                ->map
+                ->value()
+                ->toJson()
+            ;
+            $target->creator = $schedule->creator()->value();
+            $target->updater = $schedule->updater()->value();
+            $target->customer = $schedule->customer()?->value();
+            $target->title = $schedule->content()->title();
+            $target->description = $schedule->content()->description();
+            $target->start = $schedule->date()->start()->toAtomString();
+            $target->end = $schedule->date()->end()->toAtomString();
+            $target->status = $schedule->status()->name;
+            $target->repeat = $repeat;
+
+            $target->save();
         } catch (\PDOException $exception) {
             $this->handlePDOException($exception, $schedule->identifier()->value());
         }
@@ -114,7 +113,8 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
     {
         $record = $this->createQuery()
             ->ofIdentifier($identifier)
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('Schedule not found: %s', $identifier->value()));
@@ -130,7 +130,8 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
     {
         $records = $this->createQuery()
             ->ofCriteria($criteria)
-            ->get();
+            ->get()
+        ;
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }
@@ -142,7 +143,8 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
     {
         $target = $this->createQuery()
             ->ofIdentifier($identifier)
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Schedule not found: %s', $identifier->value()));
@@ -153,8 +155,6 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
 
     /**
      * クエリビルダーを生成する.
-     *
-     * @return Builder
      */
     private function createQuery(): Builder
     {
@@ -163,9 +163,6 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
 
     /**
      * レコードからエンティティを復元する.
-     *
-     * @param Record $record
-     * @return Entity
      */
     private function restoreEntity(Record $record): Entity
     {
@@ -188,7 +185,8 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
     private function restoreParticipants(Record $record): Enumerable
     {
         return Collection::make(\json_decode($record->participants, true))
-            ->map(fn (string $value): UserIdentifier => new UserIdentifier($value));
+            ->map(fn (string $value): UserIdentifier => new UserIdentifier($value))
+        ;
     }
 
     /**
@@ -204,9 +202,6 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
 
     /**
      * スケジュールステータスを復元する.
-     *
-     * @param string $status
-     * @return ScheduleStatus
      */
     private function restoreStatus(string $status): ScheduleStatus
     {
@@ -219,11 +214,8 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
 
     /**
      * 繰り返し頻度を復元する.
-     *
-     * @param string $repeat
-     * @return RepeatFrequency|null
      */
-    private function restoreRepeatFrequency(string|null $repeat): RepeatFrequency|null
+    private function restoreRepeatFrequency(?string $repeat): ?RepeatFrequency
     {
         if (\is_null($repeat)) {
             return null;
