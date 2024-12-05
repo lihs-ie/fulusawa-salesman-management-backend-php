@@ -15,6 +15,8 @@ use Tests\TestCase;
  * @group transactionhistory
  *
  * @coversNothing
+ *
+ * @internal
  */
 class TransactionHistoryEncoderTest extends TestCase
 {
@@ -35,10 +37,10 @@ class TransactionHistoryEncoderTest extends TestCase
      *
      * @dataProvider provideDescription
      */
-    public function testEncodeSuccessReturnsArray(string|null $description): void
+    public function testEncodeSuccessReturnsArray(?string $description): void
     {
         $history = $this->builder()->create(TransactionHistory::class, null, [
-          'description' => $description,
+            'description' => $description,
         ]);
 
         $encoder = new TransactionHistoryEncoder();

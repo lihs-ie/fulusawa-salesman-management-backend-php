@@ -5,45 +5,80 @@ namespace App\Infrastructures\TransactionHistory;
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\TransactionHistory\Entities\TransactionHistory as Entity;
 use App\Domains\TransactionHistory\TransactionHistoryRepository;
+use App\Domains\TransactionHistory\ValueObjects\Criteria;
 use App\Domains\TransactionHistory\ValueObjects\TransactionHistoryIdentifier;
 use App\Domains\TransactionHistory\ValueObjects\TransactionType;
 use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Infrastructures\Common\AbstractEloquentRepository;
 use App\Infrastructures\TransactionHistory\Models\TransactionHistory as Record;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Enumerable;
 
 /**
- * 取引履歴リポジトリ
+ * 取引履歴リポジトリ.
  */
-class EloquentTransactionHistoryRepository implements TransactionHistoryRepository
+class EloquentTransactionHistoryRepository extends AbstractEloquentRepository implements TransactionHistoryRepository
 {
     /**
      * コンストラクタ.
-     *
-     * @param Record $builder
      */
-    public function __construct(private readonly Record $builder)
+    public function __construct(private readonly Record $builder) {}
+
+    /**
+     * {@inheritDoc}
+     */
+    public function add(Entity $transactionHistory): void
     {
+        try {
+            $this->createQuery()
+                ->create(
+                    [
+                        'identifier' => $transactionHistory->identifier()->value(),
+                        'customer' => $transactionHistory->customer()->value(),
+                        'user' => $transactionHistory->user()->value(),
+                        'type' => $transactionHistory->type()->name,
+                        'description' => $transactionHistory->description(),
+                        'date' => $transactionHistory->date()->toAtomString(),
+                    ]
+                )
+            ;
+        } catch (\PDOException $exception) {
+            $this->handlePDOException(
+                exception: $exception,
+                messages: $transactionHistory->identifier()->value()
+            );
+        }
     }
 
     /**
      * {@inheritDoc}
      */
-    public function persist(Entity $transactionHistory): void
+    public function update(Entity $transactionHistory): void
     {
-        $this->createQuery()
-          ->updateOrCreate(
-              ['identifier' => $transactionHistory->identifier()->value()],
-              [
-              'identifier' => $transactionHistory->identifier()->value(),
-              'customer' => $transactionHistory->customer()->value(),
-              'user' => $transactionHistory->user()->value(),
-              'type' => $transactionHistory->type()->name,
-              'description' => $transactionHistory->description(),
-              'date' => $transactionHistory->date()->toAtomString()
-        ]
-          );
+        $target = $this->createQuery()
+            ->ofIdentifier($transactionHistory->identifier())
+            ->first()
+        ;
+
+        if (\is_null($target)) {
+            throw new \OutOfBoundsException(\sprintf('TransactionHistory not found: %s', $transactionHistory->identifier()->value()));
+        }
+
+        try {
+            $target->customer = $transactionHistory->customer()->value();
+            $target->user = $transactionHistory->user()->value();
+            $target->type = $transactionHistory->type()->name;
+            $target->description = $transactionHistory->description();
+            $target->date = $transactionHistory->date()->toAtomString();
+
+            $target->save();
+        } catch (\PDOException $exception) {
+            $this->handlePDOException(
+                exception: $exception,
+                messages: $transactionHistory->identifier()->value()
+            );
+        }
     }
 
     /**
@@ -52,8 +87,9 @@ class EloquentTransactionHistoryRepository implements TransactionHistoryReposito
     public function find(TransactionHistoryIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('TransactionHistory not found: %s', $identifier->value()));
@@ -65,11 +101,13 @@ class EloquentTransactionHistoryRepository implements TransactionHistoryReposito
     /**
      * {@inheritDoc}
      */
-    public function list(): Enumerable
+    public function list(Criteria $criteria): Enumerable
     {
         return $this->createQuery()
-          ->get()
-          ->map(fn (Record $record): Entity => $this->restoreEntity($record));
+            ->ofCriteria($criteria)
+            ->get()
+            ->map(fn (Record $record): Entity => $this->restoreEntity($record))
+        ;
     }
 
     /**
@@ -78,8 +116,9 @@ class EloquentTransactionHistoryRepository implements TransactionHistoryReposito
     public function delete(TransactionHistoryIdentifier $identifier): void
     {
         $target = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('TransactionHistory not found: %s', $identifier->value()));
@@ -89,33 +128,7 @@ class EloquentTransactionHistoryRepository implements TransactionHistoryReposito
     }
 
     /**
-     * {@inheritDoc}
-     */
-    public function ofUser(UserIdentifier $identifier): Enumerable
-    {
-        $records = $this->createQuery()
-          ->where('user', $identifier->value())
-          ->get();
-
-        return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function ofCustomer(CustomerIdentifier $identifier): Enumerable
-    {
-        $records = $this->createQuery()
-          ->where('customer', $identifier->value())
-          ->get();
-
-        return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
-    }
-
-    /**
      * クエリビルダーを生成する.
-     *
-     * @return Builder
      */
     private function createQuery(): Builder
     {
@@ -124,9 +137,6 @@ class EloquentTransactionHistoryRepository implements TransactionHistoryReposito
 
     /**
      * レコードからエンティティを復元する.
-     *
-     * @param Record $record
-     * @return Entity
      */
     private function restoreEntity(Record $record): Entity
     {
@@ -142,9 +152,6 @@ class EloquentTransactionHistoryRepository implements TransactionHistoryReposito
 
     /**
      * 取引種別を復元する.
-     *
-     * @param string $status
-     * @return TransactionType
      */
     private function restoreType(string $type): TransactionType
     {

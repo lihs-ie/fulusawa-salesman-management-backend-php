@@ -22,16 +22,13 @@ class TransactionHistoryController extends Controller
 {
     /**
      * 取引履歴追加.
-     *
-     * @param AddRequest $request
-     * @param UseCase $useCase
      */
     public function add(AddRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->add(
                 identifier: $parameters['identifier'],
                 user: $parameters['user'],
                 customer: $parameters['customer'],
@@ -41,23 +38,20 @@ class TransactionHistoryController extends Controller
             );
 
             return new Response('', Response::HTTP_CREATED);
-        } catch (\InvalidArgumentException | \UnexpectedValueException $exception) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
         }
     }
 
     /**
      * 取引履歴更新.
-     *
-     * @param UpdateRequest $request
-     * @param UseCase $useCase
      */
     public function update(UpdateRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->update(
                 identifier: $parameters['identifier'],
                 user: $parameters['user'],
                 customer: $parameters['customer'],
@@ -67,7 +61,7 @@ class TransactionHistoryController extends Controller
             );
 
             return new Response('', Response::HTTP_OK);
-        } catch (\InvalidArgumentException | \UnexpectedValueException $exception) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
         } catch (\OutOfBoundsException $exception) {
             throw new NotFoundHttpException($exception->getMessage());
@@ -76,21 +70,21 @@ class TransactionHistoryController extends Controller
 
     /**
      * 取引履歴一覧取得.
-     *
-     * @param UseCase $useCase
-     * @param TransactionHistoryEncoder $encoder
      */
     public function list(
+        ListRequest $request,
         UseCase $useCase,
         TransactionHistoryEncoder $encoder
     ) {
-        $histories = $useCase->list();
+        $parameters = $request->validated();
+
+        $histories = $useCase->list($parameters);
 
         return [
-          'transactionHistories' => $histories->map(
-              fn (TransactionHistory $history): array => $encoder->encode($history)
-          )
-            ->all()
+            'transactionHistories' => $histories->map(
+                fn (TransactionHistory $history): array => $encoder->encode($history)
+            )
+                ->all(),
         ];
     }
 
@@ -98,8 +92,6 @@ class TransactionHistoryController extends Controller
      * 取引履歴取得.
      *
      * @param ListRequest $request
-     * @param UseCase $useCase
-     * @param TransactionHistoryEncoder $encoder
      */
     public function find(
         FindRequest $request,
@@ -121,9 +113,6 @@ class TransactionHistoryController extends Controller
 
     /**
      * 取引履歴削除.
-     *
-     * @param DeleteRequest $request
-     * @param UseCase $useCase
      */
     public function delete(DeleteRequest $request, UseCase $useCase)
     {
@@ -133,7 +122,7 @@ class TransactionHistoryController extends Controller
             $useCase->delete($parameters['identifier']);
 
             return new Response('', Response::HTTP_NO_CONTENT);
-        } catch (\InvalidArgumentException | \UnexpectedValueException $exception) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
         } catch (\OutOfBoundsException $exception) {
             throw new NotFoundHttpException($exception->getMessage());

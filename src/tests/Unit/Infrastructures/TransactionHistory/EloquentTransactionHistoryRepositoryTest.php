@@ -3,11 +3,13 @@
 namespace Tests\Unit\Infrastructures\TransactionHistory;
 
 use App\Domains\Customer\ValueObjects\CustomerIdentifier;
-use App\Domains\TransactionHistory\TransactionHistoryRepository;
 use App\Domains\TransactionHistory\Entities\TransactionHistory as Entity;
+use App\Domains\TransactionHistory\TransactionHistoryRepository;
 use App\Domains\TransactionHistory\ValueObjects\Criteria;
+use App\Domains\TransactionHistory\ValueObjects\Criteria\Sort;
 use App\Domains\TransactionHistory\ValueObjects\TransactionHistoryIdentifier;
 use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Exceptions\ConflictException;
 use App\Infrastructures\TransactionHistory\EloquentTransactionHistoryRepository;
 use App\Infrastructures\TransactionHistory\Models\TransactionHistory as Record;
 use Illuminate\Support\Enumerable;
@@ -21,6 +23,8 @@ use Tests\Unit\Infrastructures\EloquentRepositoryTest;
  * @group transactionhistory
  *
  * @coversNothing
+ *
+ * @internal
  */
 class EloquentTransactionHistoryRepositoryTest extends TestCase
 {
@@ -28,42 +32,101 @@ class EloquentTransactionHistoryRepositoryTest extends TestCase
     use EloquentRepositoryTest;
 
     /**
-     * @testdox testPersistSuccessOnCreate persistメソッドで新規の取引履歴を永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドで新規の取引履歴を永続化できること.
      */
-    public function testPersistSuccessOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $record = $this->pickRecord();
 
         $entity = $this->builder()->create(Entity::class, null, [
-            'user' => new UserIdentifier($record->user),
-            'customer' => new CustomerIdentifier($record->customer),
+            'user' => $this->builder()->create(UserIdentifier::class, null, [
+                'value' => $record->user,
+            ]),
+            'customer' => $this->builder()->create(CustomerIdentifier::class, null, [
+                'value' => $record->customer,
+            ]),
         ]);
 
         $repository = $this->createRepository();
 
-        $repository->persist($entity);
+        $repository->add($entity);
 
         $this->assertPersistedRecord($entity);
     }
 
     /**
-     * @testdox testPersistSuccessOnUpdate persistメソッドで既存の取引履歴を更新できること.
+     * @testdox testAddFailureThrowsConflictExceptionWithDuplicateIdentifier addメソッドで重複する識別子の取引履歴を永続化しようとすると例外が発生すること.
      */
-    public function testPersistSuccessOnUpdate(): void
+    public function testAddFailureThrowsConflictExceptionWithDuplicateIdentifier(): void
     {
         $record = $this->pickRecord();
 
-        $expected = $this->builder()->create(Entity::class, null, [
-            'identifier' => new TransactionHistoryIdentifier($record->identifier),
-            'user' => new UserIdentifier($record->user),
-            'customer' => new CustomerIdentifier($record->customer),
+        $entity = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(TransactionHistoryIdentifier::class, null, [
+                'value' => $record->identifier,
+            ]),
+            'user' => $this->builder()->create(UserIdentifier::class, null, [
+                'value' => $record->user,
+            ]),
+            'customer' => $this->builder()->create(CustomerIdentifier::class, null, [
+                'value' => $record->customer,
+            ]),
         ]);
 
         $repository = $this->createRepository();
 
-        $repository->persist($expected);
+        $this->expectException(ConflictException::class);
+
+        $repository->add($entity);
+    }
+
+    /**
+     * @testdox testUpdateSuccessPersistEntity updateメソッドで既存の取引履歴を更新できること.
+     */
+    public function testUpdateSuccessPersistEntity(): void
+    {
+        $record = $this->pickRecord();
+
+        $expected = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(TransactionHistoryIdentifier::class, null, [
+                'value' => $record->identifier,
+            ]),
+            'user' => $this->builder()->create(UserIdentifier::class, null, [
+                'value' => $record->user,
+            ]),
+            'customer' => $this->builder()->create(CustomerIdentifier::class, null, [
+                'value' => $record->customer,
+            ]),
+        ]);
+
+        $repository = $this->createRepository();
+
+        $repository->update($expected);
 
         $this->assertPersistedRecord($expected);
+    }
+
+    /**
+     * @testdox testUpdateFailureThrowsOutOfBoundsExceptionWithMissingIdentifier updateメソッドで存在しない取引履歴を更新しようとすると例外が発生すること.
+     */
+    public function testUpdateFailureThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
+    {
+        $record = $this->pickRecord();
+
+        $entity = $this->builder()->create(Entity::class, null, [
+            'user' => $this->builder()->create(UserIdentifier::class, null, [
+                'value' => $record->user,
+            ]),
+            'customer' => $this->builder()->create(CustomerIdentifier::class, null, [
+                'value' => $record->customer,
+            ]),
+        ]);
+
+        $repository = $this->createRepository();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $repository->update($entity);
     }
 
     /**
@@ -81,73 +144,80 @@ class EloquentTransactionHistoryRepositoryTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccessReturnsAllEntities listメソッドで全ての取引履歴を取得できること.
+     * @testdox testFindFailureThrowsOutOfBoundsExceptionWithMissingIdentifier findメソッドで存在しない取引履歴を取得しようとすると例外が発生すること.
      */
-    public function testListSuccessReturnsAllEntities(): void
+    public function testFindFailureThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
     {
+        $missing = $this->builder()->create(TransactionHistoryIdentifier::class);
+
         $repository = $this->createRepository();
 
-        $actuals = $repository->list();
+        $this->expectException(\OutOfBoundsException::class);
 
-        $this->assertInstanceOf(Enumerable::class, $actuals);
-        $this->assertSame($this->records->count(), $actuals->count());
-
-        $actuals->each(function ($actual): void {
-            $this->assertInstanceOf(Entity::class, $actual);
-            $this->assertRecordProperties($actual);
-        });
+        $repository->find($missing);
     }
 
     /**
-     * @testdox testOfUserSuccessReturnsEntities ofUserメソッドで指定したユーザーの取引履歴を取得できること.
+     * @testdox testListSuccessReturnsAllEntities listメソッドで取引履歴を取得できること.
+     *
+     * @dataProvider provideCriteria
      */
-    public function testOfUserSuccessReturnsEntities(): void
+    public function testListSuccessReturnsAllEntities(\Closure $closure): void
     {
-        $target = $this->pickRecord();
+        $criteria = $closure($this);
 
-        $expecteds = $this->records
-            ->filter(fn (Record $record): bool => $record->user === $target->user);
+        $expecteds = $this->createListExpected($criteria);
 
         $repository = $this->createRepository();
 
-        $actuals = $repository->ofUser(new UserIdentifier($target->user));
-
-        $this->assertInstanceOf(Enumerable::class, $actuals);
+        $actuals = $repository->list($criteria);
 
         $expecteds
             ->zip($actuals)
-            ->eachSpread(function (?Record $expected, $actual): void {
+            ->eachSpread(function (?Record $expected, ?Entity $actual): void {
                 $this->assertNotNull($expected);
                 $this->assertNotNull($actual);
-                $this->assertInstanceOf(Entity::class, $actual);
                 $this->assertRecordProperties($actual);
-            });
+            })
+        ;
     }
 
     /**
-     * @testdox testOfCustomerSuccessReturnsEntities ofCustomerメソッドで指定した顧客の取引履歴を取得できること.
+     * 検索条件を提供するプロパイダ.
      */
-    public function testOfCustomerSuccessReturnsEntities(): void
+    public static function provideCriteria(): \Generator
     {
-        $target = $this->pickRecord();
+        yield 'empty' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class)];
 
-        $expecteds = $this->records
-            ->filter(fn (Record $record): bool => $record->customer === $target->customer);
+        yield 'customer' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
+            'customer' => $self->builder()->create(CustomerIdentifier::class, null, [
+                'value' => $self->records->random()->customer,
+            ]),
+        ])];
 
-        $repository = $this->createRepository();
+        yield 'user' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
+            'user' => $self->builder()->create(UserIdentifier::class, null, [
+                'value' => $self->records->random()->user,
+            ]),
+        ])];
 
-        $actuals = $repository->ofCustomer(new CustomerIdentifier($target->customer));
+        yield 'sort' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class, null, [
+            'sort' => $self->builder()->create(Sort::class),
+        ])];
 
-        $this->assertInstanceOf(Enumerable::class, $actuals);
+        yield 'fulfilled' => [function (self $self): Criteria {
+            $record = $self->records->random();
 
-        $expecteds
-            ->zip($actuals)
-            ->eachSpread(function (?Record $expected, $actual): void {
-                $this->assertNotNull($expected);
-                $this->assertNotNull($actual);
-                $this->assertInstanceOf(Entity::class, $actual);
-                $this->assertRecordProperties($actual);
-            });
+            return $self->builder()->create(Criteria::class, null, [
+                'customer' => $self->builder()->create(CustomerIdentifier::class, null, [
+                    'value' => $record->customer,
+                ]),
+                'user' => $self->builder()->create(UserIdentifier::class, null, [
+                    'value' => $record->user,
+                ]),
+                'sort' => $self->builder()->create(Sort::class),
+            ]);
+        }];
     }
 
     /**
@@ -197,5 +267,31 @@ class EloquentTransactionHistoryRepositoryTest extends TestCase
         $this->assertSame($record->type, $actual->type()->name);
         $this->assertSame($record->description, $actual->description());
         $this->assertSame($record->date, $actual->date()->toDateString());
+    }
+
+    /**
+     * listメソッドの期待値を生成する.
+     */
+    private function createListExpected(Criteria $criteria): Enumerable
+    {
+        return $this->records
+            ->when(
+                !\is_null($criteria->user()),
+                fn (Enumerable $records) => $records
+                    ->where('user', $criteria->user()->value())
+            )
+            ->when(
+                !\is_null($criteria->customer()),
+                fn (Enumerable $records) => $records
+                    ->where('customer', $criteria->customer()->value())
+            )
+            ->when(!\is_null($criteria->sort()), fn (Enumerable $records) => match ($criteria->sort()) {
+                Sort::CREATED_AT_ASC => $records->sortBy('created_at'),
+                Sort::CREATED_AT_DESC => $records->sortByDesc('created_at'),
+                Sort::UPDATED_AT_ASC => $records->sortBy('updated_at'),
+                Sort::UPDATED_AT_DESC => $records->sortByDesc('updated_at'),
+            })
+            ->values()
+        ;
     }
 }
