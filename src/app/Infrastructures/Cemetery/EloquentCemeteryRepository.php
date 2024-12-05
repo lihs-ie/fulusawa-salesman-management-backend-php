@@ -13,22 +13,18 @@ use App\Infrastructures\Common\AbstractEloquentRepository;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Enumerable;
-use PDOException;
 
 /**
- * 墓地情報リポジトリ
+ * 墓地情報リポジトリ.
  */
 class EloquentCemeteryRepository extends AbstractEloquentRepository implements CemeteryRepository
 {
     /**
      * コンストラクタ.
-     *
-     * @param Record $builder
      */
     public function __construct(
         private readonly Record $builder,
-    ) {
-    }
+    ) {}
 
     /**
      * {@inheritDoc}
@@ -44,12 +40,10 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
                     'type' => $cemetery->type()->name,
                     'construction' => $cemetery->construction()->toAtomString(),
                     'in_house' => $cemetery->inHouse(),
-                ]);
-        } catch (PDOException $exception) {
-            $this->handlePDOException(
-                exception: $exception,
-                messages: $cemetery->identifier()->value()
-            );
+                ])
+            ;
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception);
         }
     }
 
@@ -60,7 +54,8 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
     {
         $target = $this->createQuery()
             ->ofIdentifier($cemetery->identifier())
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Cemetery not found. identifier: %s', $cemetery->identifier()->value()));
@@ -75,11 +70,8 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
             $target->updated_at = CarbonImmutable::now();
 
             $target->save();
-        } catch (PDOException $exception) {
-            $this->handlePDOException(
-                exception: $exception,
-                messages: $cemetery->identifier()->value()
-            );
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception);
         }
     }
 
@@ -90,7 +82,8 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
     {
         $target = $this->createQuery()
             ->ofIdentifier($identifier)
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Cemetery not found. identifier: %s', $identifier->value()));
@@ -106,7 +99,8 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
     {
         $records = $this->createQuery()
             ->ofCriteria($criteria)
-            ->get();
+            ->get()
+        ;
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }
@@ -118,7 +112,8 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
     {
         $target = $this->createQuery()
             ->ofIdentifier($identifier)
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Cemetery not found. identifier: %s', $identifier->value()));
@@ -129,8 +124,6 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
 
     /**
      * クエリビルダーを生成する.
-     *
-     * @return Builder
      */
     private function createQuery(): Builder
     {
@@ -139,9 +132,6 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
 
     /**
      * レコードからユーザーエンティティを復元する.
-     *
-     * @param Record $record
-     * @return Entity
      */
     private function restoreEntity(Record $record): Entity
     {
@@ -157,9 +147,6 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
 
     /**
      * レコードから墓地タイプを復元する.
-     *
-     * @param string $type
-     * @return CemeteryType
      */
     private function restoreType(string $type): CemeteryType
     {
@@ -168,7 +155,7 @@ class EloquentCemeteryRepository extends AbstractEloquentRepository implements C
             CemeteryType::FAMILY->name => CemeteryType::FAMILY,
             CemeteryType::COMMUNITY->name => CemeteryType::COMMUNITY,
             CemeteryType::OTHER->name => CemeteryType::OTHER,
-            default => throw new \InvalidArgumentException('Invalid type: ' . $type),
+            default => throw new \InvalidArgumentException('Invalid type: '.$type),
         };
     }
 }

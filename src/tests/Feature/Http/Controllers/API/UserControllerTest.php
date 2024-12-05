@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Http\Controllers\API;
 
+use App\Domains\Common\ValueObjects\MailAddress;
 use App\Domains\User\Entities\User as Entity;
 use App\Domains\User\ValueObjects\Role;
 use App\Domains\User\ValueObjects\UserIdentifier;
@@ -24,6 +25,8 @@ use Tests\TestCase;
  * @group user
  *
  * @coversNothing
+ *
+ * @internal
  */
 class UserControllerTest extends TestCase
 {
@@ -35,7 +38,7 @@ class UserControllerTest extends TestCase
     /**
      * テストに使用するレコード.
      */
-    private Enumerable|null $records;
+    private ?Enumerable $records;
 
     /**
      * テストに使用するエンコーダ.
@@ -65,6 +68,7 @@ class UserControllerTest extends TestCase
 
     /**
      * @testdox testAddSuccessReturnsSuccessfulResponse ユーザー追加APIに正しいリクエストを行ったとき正常なレスポンスが返却されること.
+     *
      * @dataProvider provideRole
      */
     public function testAddSuccessReturnsSuccessfulResponse(Role $role): void
@@ -97,6 +101,54 @@ class UserControllerTest extends TestCase
     }
 
     /**
+     * @testdox testAddReturnsConflictWithDuplicateIdentifier ユーザー追加APIに重複する識別子を指定してリクエストを行ったとき409エラーが返却されること.
+     */
+    public function testAddReturnsConflictWithDuplicateIdentifier(): void
+    {
+        $record = $this->records->random();
+
+        $entity = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(
+                UserIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
+        ]);
+
+        $payload = $this->createPersistPayloadFromEntity($entity);
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
+        );
+
+        $response->assertConflict();
+    }
+
+    /**
+     * @testdox testAddFailureReturnsConflictWithDuplicateEmail ユーザー追加APIに重複するメールアドレスを指定してリクエストを行ったとき409エラーが返却されること.
+     */
+    public function testAddFailureReturnsConflictWithDuplicateEmail(): void
+    {
+        $record = $this->records->random();
+
+        $entity = $this->builder()->create(Entity::class, null, [
+            'email' => $this->builder()->create(
+                MailAddress::class,
+                null,
+                ['value' => $record->email]
+            ),
+        ]);
+
+        $payload = $this->createPersistPayloadFromEntity($entity);
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
+        );
+
+        $response->assertConflict();
+    }
+
+    /**
      * @testdox testUpdateSuccessReturnsSuccessfulResponse ユーザー更新APIに正しいリクエストを行ったとき正常なレスポンスが返却されること.
      */
     public function testUpdateSuccessReturnsSuccessfulResponse(): void
@@ -104,11 +156,11 @@ class UserControllerTest extends TestCase
         $record = $this->records->random();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              UserIdentifier::class,
-              null,
-              ['value' => $record->identifier]
-          ),
+            'identifier' => $this->builder()->create(
+                UserIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
         ]);
 
         $payload = $this->createPersistPayloadFromEntity($entity);
@@ -129,11 +181,11 @@ class UserControllerTest extends TestCase
         $record = $this->records->random();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              UserIdentifier::class,
-              null,
-              ['value' => $record->identifier]
-          ),
+            'identifier' => $this->builder()->create(
+                UserIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
         ]);
 
         $payload = $this->createPersistPayloadFromEntity($entity);
@@ -151,11 +203,11 @@ class UserControllerTest extends TestCase
         $record = $this->records->random();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              UserIdentifier::class,
-              null,
-              ['value' => $record->identifier]
-          ),
+            'identifier' => $this->builder()->create(
+                UserIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
         ]);
 
         $payload = $this->createPersistPayloadFromEntity($entity);
@@ -173,7 +225,15 @@ class UserControllerTest extends TestCase
      */
     public function testUpdateFailureReturnsNotFoundWithInvalidIdentifier(): void
     {
-        $this->markTestSkipped('persistメソッドを分けたのちに実装');
+        $entity = $this->builder()->create(Entity::class);
+
+        $payload = $this->createPersistPayloadFromEntity($entity);
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($payload, $accessToken),
+        );
+
+        $response->assertNotFound();
     }
 
     /**
@@ -223,9 +283,9 @@ class UserControllerTest extends TestCase
     public function testListSuccessReturnsSuccessfulResponse(): void
     {
         $expected = [
-          'users' => $this->records->map(
-              fn (Record $record): array => $this->createFindExpectedResult($record)
-          )->all()
+            'users' => $this->records->map(
+                fn (Record $record): array => $this->createFindExpectedResult($record)
+            )->all(),
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -291,7 +351,7 @@ class UserControllerTest extends TestCase
     /**
      * ユーザー追加APIを実行する.
      */
-    private function hitAddAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitAddAPI(array $payload, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'POST',
@@ -304,7 +364,7 @@ class UserControllerTest extends TestCase
     /**
      * ユーザー更新APIを実行する.
      */
-    private function hitUpdateAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitUpdateAPI(array $payload, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'PUT',
@@ -317,8 +377,7 @@ class UserControllerTest extends TestCase
     /**
      * ユーザー取得APIを実行する.
      */
-
-    private function hitFindAPI(string $identifier, string|null $accessToken = null): TestResponse
+    private function hitFindAPI(string $identifier, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
@@ -330,7 +389,7 @@ class UserControllerTest extends TestCase
     /**
      * ユーザー一覧取得APIを実行する.
      */
-    private function hitListAPI(array $conditions = [], string|null $accessToken = null): TestResponse
+    private function hitListAPI(array $conditions = [], ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
@@ -342,7 +401,7 @@ class UserControllerTest extends TestCase
     /**
      * ユーザー削除APIを実行する.
      */
-    private function hitDeleteAPI(string $identifier, string|null $accessToken = null): TestResponse
+    private function hitDeleteAPI(string $identifier, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'DELETE',
@@ -373,20 +432,13 @@ class UserControllerTest extends TestCase
     private function assertPersisted(array $payload): void
     {
         $this->assertDatabaseHas('users', [
-          'identifier' => $payload['identifier'],
-          'first_name' => $payload['name']['first'],
-          'last_name' => $payload['name']['last'],
-          'phone_area_code' => $payload['phone']['areaCode'],
-          'phone_local_code' => $payload['phone']['localCode'],
-          'phone_subscriber_number' => $payload['phone']['subscriberNumber'],
-          'postal_code_first' => $payload['address']['postalCode']['first'],
-          'postal_code_second' => $payload['address']['postalCode']['second'],
-          'prefecture' => $payload['address']['prefecture'],
-          'city' => $payload['address']['city'],
-          'street' => $payload['address']['street'],
-          'building' => $payload['address']['building'],
-          'email' => $payload['email'],
-          'role' => $payload['role'],
+            'identifier' => $payload['identifier'],
+            'first_name' => $payload['name']['first'],
+            'last_name' => $payload['name']['last'],
+            'phone_number' => \json_encode($payload['phone']),
+            'address' => \json_encode($payload['address']),
+            'email' => $payload['email'],
+            'role' => $payload['role'],
         ]);
 
         $record = Record::where('identifier', $payload['identifier'])->first();
@@ -399,28 +451,15 @@ class UserControllerTest extends TestCase
     private function createFindExpectedResult(Record $record): array
     {
         return [
-          'identifier' => $record->identifier,
-          'name' => [
-            'first' => $record->first_name,
-            'last' => $record->last_name,
-          ],
-          'address' => [
-            'postalCode' => [
-              'first' => $record->postal_code_first,
-              'second' => $record->postal_code_second,
+            'identifier' => $record->identifier,
+            'name' => [
+                'first' => $record->first_name,
+                'last' => $record->last_name,
             ],
-            'prefecture' => $record->prefecture,
-            'city' => $record->city,
-            'street' => $record->street,
-            'building' => $record->building,
-          ],
-          'phone' => [
-            'areaCode' => $record->phone_area_code,
-            'localCode' => $record->phone_local_code,
-            'subscriberNumber' => $record->phone_subscriber_number,
-          ],
-          'email' => $record->email,
-          'role' => $record->role,
+            'address' => \json_decode($record->address, true),
+            'phone' => \json_decode($record->phone_number, true),
+            'email' => $record->email,
+            'role' => $record->role,
         ];
     }
 }

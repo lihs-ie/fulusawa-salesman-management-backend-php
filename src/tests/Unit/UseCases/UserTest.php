@@ -4,10 +4,11 @@ namespace Tests\Unit\UseCases;
 
 use App\Domains\User\Entities\User as Entity;
 use App\Domains\User\UserRepository;
-use App\Domains\User\ValueObjects\Role;
-use App\UseCases\Factories\CommonDomainFactory;
+use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Exceptions\ConflictException;
 use App\UseCases\User as UseCase;
 use Illuminate\Support\Enumerable;
+use Illuminate\Support\Facades\Hash;
 use Tests\Support\Assertions\NullableValueComparable;
 use Tests\Support\DependencyBuildable;
 use Tests\TestCase;
@@ -18,6 +19,8 @@ use Tests\TestCase;
  * @group user
  *
  * @coversNothing
+ *
+ * @internal
  */
 class UserTest extends TestCase
 {
@@ -41,9 +44,9 @@ class UserTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnCreate persistメソッドで新規のスケジュールを永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドで新規のユーザーを永続化できること.
      */
-    public function testPersistSuccessInCaseOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $expected = $this->builder()->create(Entity::class);
 
@@ -51,7 +54,7 @@ class UserTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->add(
             identifier: $parameters['identifier'],
             name: $parameters['name'],
             address: $parameters['address'],
@@ -65,9 +68,57 @@ class UserTest extends TestCase
     }
 
     /**
-     * @testdox testPersistSuccessInCaseOnUpdate persistメソッドで既存のスケジュールを上書きして永続化できること.
+     * @testdox testAddFailureThrowsConflictExceptionWithDuplicateIdentifier addメソッドで既存のユーザーを追加しようとすると例外が発生すること.
      */
-    public function testPersistSuccessInCaseOnUpdate(): void
+    public function testAddFailureThrowsConflictExceptionWithDuplicateIdentifier(): void
+    {
+        $instance = $this->instances->random();
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($instance);
+
+        $this->expectException(ConflictException::class);
+
+        $useCase->add(
+            identifier: $parameters['identifier'],
+            name: $parameters['name'],
+            address: $parameters['address'],
+            phone: $parameters['phone'],
+            email: $parameters['email'],
+            password: $parameters['password'],
+            role: $parameters['role'],
+        );
+    }
+
+    /**
+     * @testdox testAddFailureThrowsConflictExceptionWithDuplicateEmail addメソッドで既存のメールアドレスを追加しようとすると例外が発生すること.
+     */
+    public function testAddFailureThrowsConflictExceptionWithDuplicateEmail(): void
+    {
+        $instance = $this->instances->random();
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($instance);
+
+        $this->expectException(ConflictException::class);
+
+        $useCase->add(
+            identifier: $this->builder()->create(UserIdentifier::class)->value(),
+            name: $parameters['name'],
+            address: $parameters['address'],
+            phone: $parameters['phone'],
+            email: $parameters['email'],
+            password: $parameters['password'],
+            role: $parameters['role'],
+        );
+    }
+
+    /**
+     * @testdox testUpdatePersistEntity updateソッドで既存のユーザーを上書きして永続化できること.
+     */
+    public function testUpdatePersistEntity(): void
     {
         $target = $this->instances->random();
 
@@ -77,7 +128,7 @@ class UserTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($expected);
 
-        $useCase->persist(
+        $useCase->update(
             identifier: $parameters['identifier'],
             name: $parameters['name'],
             address: $parameters['address'],
@@ -91,7 +142,65 @@ class UserTest extends TestCase
     }
 
     /**
-     * @testdox testFindSuccessReturnsEntity findメソッドでスケジュール情報を取得できること.
+     * @testdox testUpdateFailureThrowsOutOfBoundsExceptionWithMissingIdentifier updateメソッドで既存のユーザーを追加しようとすると例外が発生すること.
+     */
+    public function testUpdateFailureThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
+    {
+        $instance = $this->builder()->create(Entity::class);
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($instance);
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $useCase->update(
+            identifier: $parameters['identifier'],
+            name: $parameters['name'],
+            address: $parameters['address'],
+            phone: $parameters['phone'],
+            email: $parameters['email'],
+            password: $parameters['password'],
+            role: $parameters['role'],
+        );
+    }
+
+    /**
+     * @testdox testUpdateFailureThrowsConflictExceptionWithDuplicateEmail updateメソッドで既存のメールアドレスを追加しようとすると例外が発生すること.
+     */
+    public function testUpdateFailureThrowsConflictExceptionWithDuplicateEmail(): void
+    {
+        $target = $this->instances->random();
+
+        $duplicate = $this->instances->first(
+            fn (Entity $instance) => !$instance->identifier()->equals($target->identifier())
+        );
+
+        $next = $this->builder()->create(
+            Entity::class,
+            null,
+            ['identifier' => $target->identifier(), 'email' => $duplicate->email()]
+        );
+
+        [$useCase] = $this->createPersistUseCase();
+
+        $parameters = $this->createParametersFromEntity($next);
+
+        $this->expectException(ConflictException::class);
+
+        $useCase->update(
+            identifier: $parameters['identifier'],
+            name: $parameters['name'],
+            address: $parameters['address'],
+            phone: $parameters['phone'],
+            email: $parameters['email'],
+            password: $parameters['password'],
+            role: $parameters['role'],
+        );
+    }
+
+    /**
+     * @testdox testFindSuccessReturnsEntity findメソッドでユーザーを取得できること.
      */
     public function testFindSuccessReturnsEntity(): void
     {
@@ -105,7 +214,7 @@ class UserTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccessReturnsEntitiesWithEmptyCriteria listメソッドでスケジュール情報一覧を取得できること.
+     * @testdox testListSuccessReturnsEntitiesWithEmptyCriteria listメソッドでユーザー一覧を取得できること.
      */
     public function testListSuccessReturnsEntitiesWithEmptyCriteria(): void
     {
@@ -121,11 +230,12 @@ class UserTest extends TestCase
                 $this->assertNotNull($expected);
                 $this->assertInstanceOf(Entity::class, $actual);
                 $this->assertEntity($expected, $actual);
-            });
+            })
+        ;
     }
 
     /**
-     * @testdox testListSuccessReturnsEntitiesWithCriteria listメソッドでスケジュール情報一覧を取得できること.
+     * @testdox testListSuccessReturnsEntitiesWithCriteria listメソッドでユーザー一覧を取得できること.
      */
     public function testListSuccessReturnsEntitiesWithCriteria(): void
     {
@@ -143,13 +253,14 @@ class UserTest extends TestCase
                 $this->assertNotNull($expected);
                 $this->assertInstanceOf(Entity::class, $actual);
                 $this->assertEntity($expected, $actual);
-            });
+            })
+        ;
     }
 
     /**
-     * @testdox testDeleteSuccess deleteメソッドで指定したスケジュール情報を削除できること.
+     * @testdox testDeleteSuccessRemoveEntity deleteメソッドで指定したユーザーを削除できること.
      */
-    public function testDeleteSuccess(): void
+    public function testDeleteSuccessRemoveEntity(): void
     {
         [$removed, $onRemove] = $this->createRemoveHandler();
 
@@ -168,6 +279,24 @@ class UserTest extends TestCase
         $removed->each(function (Entity $instance) use ($target): void {
             $this->assertFalse($instance->identifier()->equals($target->identifier()));
         });
+    }
+
+    /**
+     * @testdox testDeleteFailureThrowsOutOfBoundsExceptionWithMissingIdentifier deleteメソッドで存在しないユーザーを削除しようとすると例外が発生すること.
+     */
+    public function testDeleteFailureThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
+    {
+        $useCase = new UseCase(
+            repository: $this->builder()->create(
+                UserRepository::class,
+                null,
+                ['instances' => $this->instances]
+            ),
+        );
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $useCase->delete($this->builder()->create(UserIdentifier::class)->value());
     }
 
     /**
@@ -219,7 +348,9 @@ class UserTest extends TestCase
         $this->assertTrue($expected->address()->equals($actual->address()));
         $this->assertTrue($expected->phone()->equals($actual->phone()));
         $this->assertTrue($expected->email()->equals($actual->email()));
-        $this->assertTrue($expected->password() === $actual->password());
+        Hash::isHashed($actual->password())
+            ? $this->assertTrue(Hash::check($expected->password(), $actual->password()))
+            : $this->assertTrue($expected->password() === $actual->password());
         $this->assertTrue($expected->role() === $actual->role());
     }
 
@@ -236,11 +367,6 @@ class UserTest extends TestCase
      */
     private function createParametersFromEntity(Entity $entity): array
     {
-        $role = match ($entity->role()) {
-            Role::ADMIN => '1',
-            Role::USER => '2',
-        };
-
         return [
             'identifier' => $entity->identifier()->value(),
             'name' => [
@@ -264,7 +390,7 @@ class UserTest extends TestCase
             ],
             'email' => $entity->email()->value(),
             'password' => $entity->password(),
-            'role' => $role,
+            'role' => $entity->role()->name,
         ];
     }
 }

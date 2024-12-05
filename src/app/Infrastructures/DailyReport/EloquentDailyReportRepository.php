@@ -10,13 +10,12 @@ use App\Domains\Schedule\ValueObjects\ScheduleIdentifier;
 use App\Domains\User\ValueObjects\UserIdentifier;
 use App\Domains\Visit\ValueObjects\VisitIdentifier;
 use App\Infrastructures\Common\AbstractEloquentRepository;
-use App\Infrastructures\Support\Common\EloquentCommonDomainRestorer;
 use App\Infrastructures\DailyReport\Models\DailyReport as Record;
+use App\Infrastructures\Support\Common\EloquentCommonDomainRestorer;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
-use PDOException;
 
 /**
  * 日報リポジトリ.
@@ -27,13 +26,10 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
 
     /**
      * コンストラクタ.
-     *
-     * @param Record $builder
      */
     public function __construct(
         private readonly Record $builder
-    ) {
-    }
+    ) {}
 
     /**
      * {@inheritDoc}
@@ -55,12 +51,10 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
                         ->value
                         ->toJson(),
                     'is_submitted' => $dailyReport->isSubmitted(),
-                ]);
-        } catch (PDOException $exception) {
-            $this->handlePDOException(
-                exception: $exception,
-                messages: $dailyReport->identifier()->value()
-            );
+                ])
+            ;
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception);
         }
     }
 
@@ -71,7 +65,8 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
     {
         $target = $this->createQuery()
             ->ofIdentifier($dailyReport->identifier())
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('DailyReport not found %s', $dailyReport->identifier()->value()));
@@ -83,20 +78,19 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
             $target->schedules = $dailyReport->schedules()
                 ->map
                 ->value
-                ->toJson();
+                ->toJson()
+            ;
             $target->visits = $dailyReport->visits()
                 ->map
                 ->value
-                ->toJson();
+                ->toJson()
+            ;
             $target->is_submitted = $dailyReport->isSubmitted();
             $target->updated_at = CarbonImmutable::now();
 
             $target->save();
-        } catch (PDOException $exception) {
-            $this->handlePDOException(
-                exception: $exception,
-                messages: $dailyReport->identifier()->value()
-            );
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception);
         }
     }
 
@@ -107,7 +101,8 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
     {
         $record = $this->createQuery()
             ->ofIdentifier($identifier)
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('DailyReport not found %s', $identifier->value()));
@@ -124,7 +119,8 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
         return $this->createQuery()
             ->ofCriteria($criteria)
             ->get()
-            ->map(fn ($record): Entity => $this->restoreEntity($record));
+            ->map(fn ($record): Entity => $this->restoreEntity($record))
+        ;
     }
 
     /**
@@ -134,7 +130,8 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
     {
         $target = $this->createQuery()
             ->ofIdentifier($identifier)
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('DailyReport not found %s', $identifier->value()));
@@ -145,8 +142,6 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
 
     /**
      * クエリビルダーを生成する.
-     *
-     * @return Builder
      */
     private function createQuery(): Builder
     {
@@ -155,9 +150,6 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
 
     /**
      * レコードからユーザーエンティティを復元する.
-     *
-     * @param Record $record
-     * @return Entity
      */
     private function restoreEntity(Record $record): Entity
     {
@@ -173,21 +165,16 @@ class EloquentDailyReportRepository extends AbstractEloquentRepository implement
 
     /**
      * レコードからスケジュール識別子のリストを復元する.
-     *
-     * @param Record $record
-     * @return Enumerable
      */
     private function restoreSchedules(Record $record): Enumerable
     {
         return Collection::make(json_decode($record->schedules, null))
-            ->map(fn (string $schedule): ScheduleIdentifier => new ScheduleIdentifier($schedule));
+            ->map(fn (string $schedule): ScheduleIdentifier => new ScheduleIdentifier($schedule))
+        ;
     }
 
     /**
      * レコードから訪問識別子のリストを復元する.
-     *
-     * @param Record $record
-     * @return Enumerable
      */
     private function restoreVisits(Record $record): Enumerable
     {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Domains\User\Entities\User;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Encoders\User\UserEncoder;
 use App\Http\Requests\API\User\AddRequest;
@@ -12,6 +13,7 @@ use App\Http\Requests\API\User\UpdateRequest;
 use App\UseCases\User as UseCase;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -21,16 +23,13 @@ class UserController extends Controller
 {
     /**
      * ユーザー追加.
-     *
-     * @param AddRequest $request
-     * @param UseCase $useCase
      */
     public function add(AddRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->add(
                 identifier: $parameters['identifier'],
                 name: $parameters['name'],
                 address: $parameters['address'],
@@ -43,21 +42,20 @@ class UserController extends Controller
             return new Response('', Response::HTTP_CREATED);
         } catch (\InvalidArgumentException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
+        } catch (ConflictException $exception) {
+            throw new ConflictHttpException($exception->getMessage());
         }
     }
 
     /**
      * ユーザー更新.
-     *
-     * @param UpdateRequest $request
-     * @param UseCase $useCase
      */
     public function update(UpdateRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->update(
                 identifier: $parameters['identifier'],
                 name: $parameters['name'],
                 address: $parameters['address'],
@@ -77,10 +75,6 @@ class UserController extends Controller
 
     /**
      * ユーザー取得.
-     *
-     * @param FindRequest $request
-     * @param UseCase $useCase
-     * @param UserEncoder $encoder
      */
     public function find(
         FindRequest $request,
@@ -100,26 +94,20 @@ class UserController extends Controller
 
     /**
      * ユーザー一覧取得.
-     *
-     * @param UseCase $useCase
-     * @param UserEncoder $encoder
      */
     public function list(UseCase $useCase, UserEncoder $encoder)
     {
         $users = $useCase->list();
 
         return [
-          'users' => $users
-            ->map(fn (User $user): array => $encoder->encode($user))
-            ->all()
+            'users' => $users
+                ->map(fn (User $user): array => $encoder->encode($user))
+                ->all(),
         ];
     }
 
     /**
      * ユーザー削除.
-     *
-     * @param DeleteRequest $request
-     * @param UseCase $useCase
      */
     public function delete(DeleteRequest $request, UseCase $useCase)
     {

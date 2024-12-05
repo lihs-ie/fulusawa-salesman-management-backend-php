@@ -7,40 +7,39 @@ use App\Domains\User\ValueObjects\UserIdentifier;
 use Illuminate\Support\Enumerable;
 
 /**
- * ユーザーリポジトリ
+ * ユーザーリポジトリ.
  */
 interface UserRepository
 {
     /**
-     * ユーザーを永続化する
+     * ユーザーを永続化する.
      *
-     * @param User $user
-     * @return void
+     * @throws ConflictException ユーザーが既に存在する場合|メールアドレスが既に使用されている場合
      */
-    public function persist(User $user): void;
+    public function add(User $user): void;
 
     /**
-     * ユーザーを取得する
+     * ユーザーを更新する.
      *
-     * @param UserIdentifier $identifier
-     * @return User
+     * @throws \OutOfBoundsException ユーザーが存在しない場合
+     * @throws ConflictException     メールアドレスが既に使用されている場合
+     */
+    public function update(User $user): void;
+
+    /**
+     * ユーザーを取得する.
      *
      * @throws \OutOfBoundsException ユーザーが存在しない場合
      */
     public function find(UserIdentifier $identifier): User;
 
     /**
-     * ユーザー一覧を取得する
-     *
-     * @return Enumerable
+     * ユーザー一覧を取得する.
      */
     public function list(): Enumerable;
 
     /**
-     * ユーザーを削除する
-     *
-     * @param UserIdentifier $identifier
-     * @return void
+     * ユーザーを削除する.
      */
     public function delete(UserIdentifier $identifier): void;
 }

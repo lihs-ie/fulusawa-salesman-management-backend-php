@@ -2,22 +2,26 @@
 
 namespace App\Infrastructures\User\Models;
 
+use App\Domains\User\ValueObjects\UserIdentifier;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 /**
- * usersテーブル
+ * usersテーブル.
  *
- * @property-read \Illuminate\Notifications\DatabaseNotificationCollection<int, \Illuminate\Notifications\DatabaseNotification> $notifications
- * @property-read int|null $notifications_count
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \Laravel\Sanctum\PersonalAccessToken> $tokens
- * @property-read int|null $tokens_count
+ * @property \Illuminate\Notifications\DatabaseNotificationCollection<int, \Illuminate\Notifications\DatabaseNotification> $notifications
+ * @property null|int                                                                                                      $notifications_count
+ * @property \Illuminate\Database\Eloquent\Collection<int, \Laravel\Sanctum\PersonalAccessToken>                           $tokens
+ * @property null|int                                                                                                      $tokens_count
+ *
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|User query()
+ *
  * @mixin \Eloquent
  */
 class User extends Authenticatable
@@ -27,9 +31,9 @@ class User extends Authenticatable
     use Notifiable;
     use HasUuids;
 
-    protected $primaryKey = 'identifier';
-
     public $incrementing = false;
+
+    protected $primaryKey = 'identifier';
 
     protected $keyType = 'string';
 
@@ -43,15 +47,8 @@ class User extends Authenticatable
         'first_name',
         'last_name',
         'email',
-        'phone_area_code',
-        'phone_local_code',
-        'phone_subscriber_number',
-        'postal_code_first',
-        'postal_code_second',
-        'prefecture',
-        'city',
-        'street',
-        'building',
+        'phone_number',
+        'address',
         'password',
         'role',
     ];
@@ -65,6 +62,14 @@ class User extends Authenticatable
         'password',
         'remember_token',
     ];
+
+    /**
+     * ユーザー識別子に一致するレコードを取得する.
+     */
+    public function scopeOfIdentifier(Builder $query, UserIdentifier $identifier): Builder
+    {
+        return $query->where('identifier', $identifier->value());
+    }
 
     /**
      * Get the attributes that should be cast.

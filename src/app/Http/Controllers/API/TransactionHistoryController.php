@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Domains\TransactionHistory\Entities\TransactionHistory;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Encoders\TransactionHistory\TransactionHistoryEncoder;
 use App\Http\Requests\API\TransactionHistory\AddRequest;
@@ -13,6 +14,7 @@ use App\Http\Requests\API\TransactionHistory\UpdateRequest;
 use App\UseCases\TransactionHistory as UseCase;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -40,6 +42,8 @@ class TransactionHistoryController extends Controller
             return new Response('', Response::HTTP_CREATED);
         } catch (\InvalidArgumentException|\UnexpectedValueException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
+        } catch (ConflictException $exception) {
+            throw new ConflictHttpException($exception->getMessage());
         }
     }
 
