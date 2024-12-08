@@ -61,7 +61,7 @@ class EloquentScheduleRepository extends AbstractEloquentRepository implements S
                 ])
             ;
         } catch (\PDOException $exception) {
-            $this->handlePDOException($exception, $schedule->identifier()->value());
+            $this->handlePDOException($exception);
         }
     }
 

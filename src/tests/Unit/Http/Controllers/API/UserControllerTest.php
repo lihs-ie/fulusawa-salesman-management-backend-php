@@ -3,6 +3,7 @@
 namespace Tests\Unit\Http\Controllers\API;
 
 use App\Domains\User\Entities\User as Entity;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\API\UserController;
 use App\Http\Encoders\Common\AddressEncoder;
 use App\Http\Encoders\Common\PhoneNumberEncoder;
@@ -16,6 +17,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Enumerable;
 use Ramsey\Uuid\Uuid;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\Support\DependencyBuildable;
 use Tests\Support\Helpers\Http\RequestGeneratable;
@@ -30,6 +32,8 @@ use Tests\Unit\Http\Requests\API\Support\CommonDomainPayloadGeneratable;
  * @group user
  *
  * @coversNothing
+ *
+ * @internal
  */
 class UserControllerTest extends TestCase
 {
@@ -40,7 +44,7 @@ class UserControllerTest extends TestCase
     /**
      * テストに使用するインスタンス.
      */
-    private Enumerable|null $instances;
+    private ?Enumerable $instances;
 
     /**
      * テストに使用するエンコーダ.
@@ -78,9 +82,10 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload);
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+        ;
 
         $controller = new UserController();
 
@@ -104,10 +109,11 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $controller = new UserController();
 
@@ -122,6 +128,33 @@ class UserControllerTest extends TestCase
     }
 
     /**
+     * @testdox testAddThrowsConflictHttpExceptionWithExistingIdentifier addメソッドに既存の識別子を与えたときConflictHttpExceptionがスローされること.
+     */
+    public function testAddThrowsConflictHttpExceptionWithExistingIdentifier(): void
+    {
+        $payload = $this->createPayload($this->instances->first());
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new ConflictException())
+        ;
+
+        $controller = new UserController();
+
+        $request = $this->createJsonRequest(
+            class: AddRequest::class,
+            payload: $payload
+        );
+
+        $this->expectException(ConflictHttpException::class);
+
+        $controller->add($request, $useCase);
+    }
+
+    /**
      * @testdox testUpdateSuccessReturnsResponse updateメソッドに正しい値を与えたときレスポンスが返ること.
      */
     public function testUpdateSuccessReturnsResponse(): void
@@ -131,9 +164,10 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload);
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+        ;
 
         $controller = new UserController();
 
@@ -159,10 +193,11 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $controller = new UserController();
 
@@ -186,10 +221,11 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new UserController();
 
@@ -213,10 +249,11 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($target->identifier()->value())
-          ->willReturn($target);
+            ->expects($this->once())
+            ->method('find')
+            ->with($target->identifier()->value())
+            ->willReturn($target)
+        ;
 
         $controller = new UserController();
 
@@ -240,9 +277,10 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('find')
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new UserController();
 
@@ -263,16 +301,17 @@ class UserControllerTest extends TestCase
     public function testListSuccessReturnsResponse(): void
     {
         $expected = [
-          'users' =>  $this->instances->map(
-              fn (Entity $entity): array => $this->encoder->encode($entity)
-          )->all()
+            'users' => $this->instances->map(
+                fn (Entity $entity): array => $this->encoder->encode($entity)
+            )->all(),
         ];
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->willReturn($this->instances);
+            ->expects($this->once())
+            ->method('list')
+            ->willReturn($this->instances)
+        ;
 
         $controller = new UserController();
 
@@ -290,9 +329,10 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($target->identifier()->value());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($target->identifier()->value())
+        ;
 
         $controller = new UserController();
 
@@ -317,9 +357,10 @@ class UserControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('delete')
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new UserController();
 
@@ -353,13 +394,13 @@ class UserControllerTest extends TestCase
         $encoded = $this->encoder->encode($entity);
 
         return [
-          'identifier' => $encoded['identifier'],
-          'name' => $encoded['name'],
-          'address' => $encoded['address'],
-          'phone' => $encoded['phone'],
-          'email' => $encoded['email'],
-          'password' => 'Password123!',
-          'role' => $encoded['role'],
+            'identifier' => $encoded['identifier'],
+            'name' => $encoded['name'],
+            'address' => $encoded['address'],
+            'phone' => $encoded['phone'],
+            'email' => $encoded['email'],
+            'password' => 'Password123!',
+            'role' => $encoded['role'],
         ];
     }
 

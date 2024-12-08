@@ -16,7 +16,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 
 /**
- * 顧客リポジトリ
+ * 顧客リポジトリ.
  */
 class EloquentCustomerRepository extends AbstractEloquentRepository implements CustomerRepository
 {
@@ -24,13 +24,10 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
 
     /**
      * コンストラクタ.
-     *
-     * @param Record $builder
      */
     public function __construct(
         private readonly Record $builder,
-    ) {
-    }
+    ) {}
 
     /**
      * {@inheritDoc}
@@ -42,24 +39,25 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
 
         try {
             $this->createQuery()
-              ->create([
-                'identifier' => $customer->identifier()->value(),
-                'first_name' => $customer->firstName(),
-                'last_name' => $customer->lastName(),
-                'phone_area_code' => $phone->areaCode(),
-                'phone_local_code' => $phone->localCode(),
-                'phone_subscriber_number' => $phone->subscriberNumber(),
-                'postal_code_first' => $address->postalCode()->first(),
-                'postal_code_second' => $address->postalCode()->second(),
-                'prefecture' => $address->prefecture->value,
-                'city' => $address->city(),
-                'street' => $address->street(),
-                'building' => $address->building(),
-                'cemeteries' => $this->serializeIdentifiers($customer->cemeteries()),
-                'transaction_histories' => $this->serializeIdentifiers($customer->transactionHistories()),
-              ]);
+                ->create([
+                    'identifier' => $customer->identifier()->value(),
+                    'first_name' => $customer->firstName(),
+                    'last_name' => $customer->lastName(),
+                    'phone_area_code' => $phone->areaCode(),
+                    'phone_local_code' => $phone->localCode(),
+                    'phone_subscriber_number' => $phone->subscriberNumber(),
+                    'postal_code_first' => $address->postalCode()->first(),
+                    'postal_code_second' => $address->postalCode()->second(),
+                    'prefecture' => $address->prefecture->value,
+                    'city' => $address->city(),
+                    'street' => $address->street(),
+                    'building' => $address->building(),
+                    'cemeteries' => $this->serializeIdentifiers($customer->cemeteries()),
+                    'transaction_histories' => $this->serializeIdentifiers($customer->transactionHistories()),
+                ])
+            ;
         } catch (\PDOException $exception) {
-            $this->handlePDOException($exception, $customer->identifier()->value());
+            $this->handlePDOException($exception);
         }
     }
 
@@ -69,8 +67,9 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
     public function update(Entity $customer): void
     {
         $target = $this->createQuery()
-          ->ofIdentifier($customer->identifier())
-          ->first();
+            ->ofIdentifier($customer->identifier())
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Customer not found: %s', $customer->identifier()->value()));
@@ -96,7 +95,7 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
 
             $target->save();
         } catch (\PDOException $exception) {
-            $this->handlePDOException($exception, $customer->identifier()->value());
+            $this->handlePDOException($exception);
         }
     }
 
@@ -106,8 +105,9 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
     public function find(CustomerIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-          ->ofIdentifier($identifier)
-          ->first();
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('Customer not found: %s', $identifier->value()));
@@ -122,9 +122,10 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
     public function list(Criteria $criteria): Enumerable
     {
         return $this->createQuery()
-          ->ofCriteria($criteria)
-          ->get()
-          ->map(fn (Record $record): Entity => $this->restoreEntity($record));
+            ->ofCriteria($criteria)
+            ->get()
+            ->map(fn (Record $record): Entity => $this->restoreEntity($record))
+        ;
     }
 
     /**
@@ -133,8 +134,9 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
     public function delete(CustomerIdentifier $identifier): void
     {
         $target = $this->createQuery()
-          ->ofIdentifier($identifier)
-          ->first();
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Customer not found: %s', $identifier->value()));
@@ -145,8 +147,6 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
 
     /**
      * クエリビルダーを生成する.
-     *
-     * @return Builder
      */
     private function createQuery(): Builder
     {
@@ -155,9 +155,6 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
 
     /**
      * レコードから顧客エンティティを復元する.
-     *
-     * @param Record $record
-     * @return Entity
      */
     private function restoreEntity(Record $record): Entity
     {
@@ -174,26 +171,22 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
 
     /**
      * レコードから墓地情報識別子のリストを復元する.
-     *
-     * @param Record $record
-     * @return Enumerable
      */
     private function restoreCemeteries(Record $record): Enumerable
     {
         return Collection::wrap(json_decode($record->cemeteries, true))
-          ->map(fn (string $cemetery): CemeteryIdentifier => new CemeteryIdentifier($cemetery));
+            ->map(fn (string $cemetery): CemeteryIdentifier => new CemeteryIdentifier($cemetery))
+        ;
     }
 
     /**
      * レコードから取引履歴識別子のリストを復元する.
-     *
-     * @param Record $record
-     * @return Enumerable
      */
     private function restoreTransactionHistories(Record $record): Enumerable
     {
         return Collection::wrap(json_decode($record->transaction_histories, true))
-          ->map(fn (string $transactionHistory): TransactionHistoryIdentifier => new TransactionHistoryIdentifier($transactionHistory));
+            ->map(fn (string $transactionHistory): TransactionHistoryIdentifier => new TransactionHistoryIdentifier($transactionHistory))
+        ;
     }
 
     /**
@@ -203,8 +196,8 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
     {
         return \json_encode(
             $identifiers
-            ->map(fn (mixed $identifier): string => $identifier->value())
-            ->all()
+                ->map(fn (mixed $identifier): string => $identifier->value())
+                ->all()
         );
     }
 }

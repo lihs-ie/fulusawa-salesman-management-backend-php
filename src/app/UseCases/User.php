@@ -12,7 +12,7 @@ use Illuminate\Support\Enumerable;
 use Illuminate\Support\Facades\Hash;
 
 /**
- * ユーザーユースケース
+ * ユーザーユースケース.
  */
 class User
 {
@@ -20,22 +20,12 @@ class User
 
     public function __construct(
         private readonly UserRepository $repository,
-    ) {
-    }
+    ) {}
 
     /**
-     * ユーザーを永続化する
-     *
-     * @param string $identifier
-     * @param array $name
-     * @param array $address
-     * @param array $phone
-     * @param string $email
-     * @param string $password
-     * @param string $role
-     * @return void
+     * ユーザーを追加する.
      */
-    public function persist(
+    public function add(
         string $identifier,
         array $name,
         array $address,
@@ -55,14 +45,37 @@ class User
             role: $this->convertRole($role)
         );
 
-        $this->repository->persist($entity);
+        $this->repository->add($entity);
     }
 
     /**
-     * ユーザーを取得する
-     *
-     * @param string $identifier
-     * @return Entity
+     * ユーザーを更新する.
+     */
+    public function update(
+        string $identifier,
+        array $name,
+        array $address,
+        array $phone,
+        string $email,
+        string $password,
+        string $role,
+    ): void {
+        $entity = new Entity(
+            identifier: new UserIdentifier($identifier),
+            firstName: $this->extractString($name, 'first'),
+            lastName: $this->extractString($name, 'last'),
+            address: $this->extractAddress($address),
+            phone: $this->extractPhone($phone),
+            email: new MailAddress($email),
+            password: Hash::make($password),
+            role: $this->convertRole($role)
+        );
+
+        $this->repository->update($entity);
+    }
+
+    /**
+     * ユーザーを取得する.
      */
     public function find(string $identifier): Entity
     {
@@ -70,9 +83,7 @@ class User
     }
 
     /**
-     * ユーザー一覧を取得する
-     *
-     * @return Enumerable
+     * ユーザー一覧を取得する.
      */
     public function list(): Enumerable
     {
@@ -80,10 +91,7 @@ class User
     }
 
     /**
-     * ユーザーを削除する
-     *
-     * @param string $identifier
-     * @return void
+     * ユーザーを削除する.
      */
     public function delete(string $identifier): void
     {
@@ -91,10 +99,7 @@ class User
     }
 
     /**
-     * 文字列をロールに変換する
-     *
-     * @param string $role
-     * @return Role
+     * 文字列をロールに変換する.
      */
     private function convertRole(string $role): Role
     {

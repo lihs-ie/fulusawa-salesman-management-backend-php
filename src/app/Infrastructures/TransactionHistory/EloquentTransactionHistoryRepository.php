@@ -44,10 +44,7 @@ class EloquentTransactionHistoryRepository extends AbstractEloquentRepository im
                 )
             ;
         } catch (\PDOException $exception) {
-            $this->handlePDOException(
-                exception: $exception,
-                messages: $transactionHistory->identifier()->value()
-            );
+            $this->handlePDOException($exception);
         }
     }
 
@@ -74,10 +71,7 @@ class EloquentTransactionHistoryRepository extends AbstractEloquentRepository im
 
             $target->save();
         } catch (\PDOException $exception) {
-            $this->handlePDOException(
-                exception: $exception,
-                messages: $transactionHistory->identifier()->value()
-            );
+            $this->handlePDOException($exception);
         }
     }
 

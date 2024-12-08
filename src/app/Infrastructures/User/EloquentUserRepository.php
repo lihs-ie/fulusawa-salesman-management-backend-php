@@ -7,6 +7,8 @@ use App\Domains\User\Entities\User as Entity;
 use App\Domains\User\UserRepository;
 use App\Domains\User\ValueObjects\Role;
 use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Infrastructures\Common\AbstractEloquentRepository;
+use App\Infrastructures\Support\Common\EloquentCommonDomainDeflator;
 use App\Infrastructures\Support\Common\EloquentCommonDomainRestorer;
 use App\Infrastructures\User\Models\User as Record;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,44 +17,72 @@ use Illuminate\Support\Enumerable;
 /**
  * ユーザーリポジトリ.
  */
-class EloquentUserRepository implements UserRepository
+class EloquentUserRepository extends AbstractEloquentRepository implements UserRepository
 {
     use EloquentCommonDomainRestorer;
+    use EloquentCommonDomainDeflator;
 
+    /**
+     * コンストラクタ.
+     */
     public function __construct(
         private readonly Record $builder
-    ) {
+    ) {}
+
+    /**
+     * {@inheritDoc}
+     */
+    public function add(Entity $user): void
+    {
+        try {
+            $this->createQuery()
+                ->create(
+                    [
+                        'identifier' => $user->identifier()->value(),
+                        'first_name' => $user->firstName(),
+                        'last_name' => $user->lastName(),
+                        'address' => $this->deflateAddress($user->address()),
+                        'phone_number' => $this->deflatePhoneNumber($user->phone()),
+                        'email' => $user->email()->value(),
+                        'password' => $user->password(),
+                        'role' => $user->role()->name,
+                    ]
+                )
+            ;
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception, $user->identifier()->value());
+        }
     }
 
     /**
      * {@inheritDoc}
      */
-    public function persist(Entity $user): void
+    public function update(Entity $user): void
     {
-        $phone = $user->phone();
-        $address = $user->address();
+        $target = $this->createQuery()
+            ->ofIdentifier($user->identifier())
+            ->first()
+        ;
 
-        $this->createQuery()
-            ->updateOrCreate(
-                ['identifier' => $user->identifier()->value()],
+        if (\is_null($target)) {
+            throw new \OutOfBoundsException(\sprintf('User not found: %s', $user->identifier()->value()));
+        }
+
+        try {
+            $target->update(
                 [
-                    'identifier' => $user->identifier()->value(),
                     'first_name' => $user->firstName(),
                     'last_name' => $user->lastName(),
-                    'phone_area_code' => $phone->areaCode(),
-                    'phone_local_code' => $phone->localCode(),
-                    'phone_subscriber_number' => $phone->subscriberNumber(),
-                    'postal_code_first' => $address->postalCode()->first(),
-                    'postal_code_second' => $address->postalCode()->second(),
-                    'prefecture' => $address->prefecture->value,
-                    'city' => $address->city(),
-                    'street' => $address->street(),
-                    'building' => $address->building(),
+                    'address' => $this->deflateAddress($user->address()),
+                    'phone_number' => $this->deflatePhoneNumber($user->phone()),
                     'email' => $user->email()->value(),
                     'password' => $user->password(),
-                    'role' => $user->role->name,
+                    'role' => $user->role()->name,
                 ]
             );
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception, $user->identifier()->value());
+        }
     }
 
     /**
@@ -61,8 +91,9 @@ class EloquentUserRepository implements UserRepository
     public function find(UserIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-            ->where('identifier', $identifier->value())
-            ->first();
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('User not found: %s', $identifier->value()));
@@ -77,9 +108,9 @@ class EloquentUserRepository implements UserRepository
     public function list(): Enumerable
     {
         return $this->createQuery()
-            ->where('deleted_at', null)
             ->get()
-            ->map(fn (Record $record): Entity => $this->restoreEntity($record));
+            ->map(fn (Record $record): Entity => $this->restoreEntity($record))
+        ;
     }
 
     /**
@@ -87,7 +118,10 @@ class EloquentUserRepository implements UserRepository
      */
     public function delete(UserIdentifier $identifier): void
     {
-        $target = Record::where('identifier', $identifier->value())->first();
+        $target = $this->createQuery()
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('User not found: %s', $identifier->value()));
@@ -98,8 +132,6 @@ class EloquentUserRepository implements UserRepository
 
     /**
      * クエリビルダーを生成する.
-     *
-     * @return Builder
      */
     private function createQuery(): Builder
     {
@@ -108,9 +140,6 @@ class EloquentUserRepository implements UserRepository
 
     /**
      * レコードからユーザーエンティティを復元する.
-     *
-     * @param Record $record
-     * @return Entity
      */
     private function restoreEntity(Record $record): Entity
     {
@@ -128,9 +157,6 @@ class EloquentUserRepository implements UserRepository
 
     /**
      * レコードからユーザー権限を復元する.
-     *
-     * @param string $role
-     * @return Role
      */
     private function restoreRole(string $role): Role
     {

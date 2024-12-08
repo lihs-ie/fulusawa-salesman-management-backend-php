@@ -15,18 +15,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Enumerable;
 
 /**
- * フィードバックリポジトリ
+ * フィードバックリポジトリ.
  */
 class EloquentFeedbackRepository extends AbstractEloquentRepository implements FeedbackRepository
 {
     /**
      * コンストラクタ.
-     *
-     * @param Record $builder
      */
-    public function __construct(private readonly Record $builder)
-    {
-    }
+    public function __construct(private readonly Record $builder) {}
 
     /**
      * {@inheritDoc}
@@ -44,9 +40,10 @@ class EloquentFeedbackRepository extends AbstractEloquentRepository implements F
                         'created_at' => $feedback->createdAt()->toAtomString(),
                         'updated_at' => $feedback->updatedAt()->toAtomString(),
                     ]
-                );
+                )
+            ;
         } catch (\PDOException $exception) {
-            $this->handlePDOException($exception, $feedback->identifier()->value());
+            $this->handlePDOException($exception);
         }
     }
 
@@ -57,7 +54,8 @@ class EloquentFeedbackRepository extends AbstractEloquentRepository implements F
     {
         $target = $this->createQuery()
             ->ofIdentifier($feedback->identifier())
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Feedback not found: %s', $feedback->identifier()->value()));
@@ -71,7 +69,7 @@ class EloquentFeedbackRepository extends AbstractEloquentRepository implements F
 
             $target->save();
         } catch (\PDOException $exception) {
-            $this->handlePDOException($exception, $feedback->identifier()->value());
+            $this->handlePDOException($exception);
         }
     }
 
@@ -82,7 +80,8 @@ class EloquentFeedbackRepository extends AbstractEloquentRepository implements F
     {
         $record = $this->createQuery()
             ->ofIdentifier($identifier)
-            ->first();
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('Feedback not found: %s', $identifier->value()));
@@ -98,15 +97,14 @@ class EloquentFeedbackRepository extends AbstractEloquentRepository implements F
     {
         $records = $this->createQuery()
             ->ofCriteria($criteria)
-            ->get();
+            ->get()
+        ;
 
         return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
     }
 
     /**
      * クエリビルダーを生成する.
-     *
-     * @return Builder
      */
     private function createQuery(): Builder
     {
@@ -115,9 +113,6 @@ class EloquentFeedbackRepository extends AbstractEloquentRepository implements F
 
     /**
      * レコードからエンティティを復元する.
-     *
-     * @param Record $record
-     * @return Entity
      */
     private function restoreEntity(Record $record): Entity
     {
@@ -133,9 +128,6 @@ class EloquentFeedbackRepository extends AbstractEloquentRepository implements F
 
     /**
      * フィードバック種別を復元する.
-     *
-     * @param string $type
-     * @return FeedbackType
      */
     private function restoreType(string $type): FeedbackType
     {
@@ -149,9 +141,6 @@ class EloquentFeedbackRepository extends AbstractEloquentRepository implements F
 
     /**
      * フィードバックステータスを復元する.
-     *
-     * @param string $status
-     * @return FeedbackStatus
      */
     private function restoreStatus(string $status): FeedbackStatus
     {

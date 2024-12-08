@@ -17,44 +17,39 @@ trait EloquentCommonDomainRestorer
 {
     /**
      * レコードから住所を復元する.
-     *
-     * @param Record $record
-     * @return Address
      */
     protected function restoreAddress(Record $record): Address
     {
+        $address = \json_decode($record->address, true);
+
         return new Address(
             postalCode: new PostalCode(
-                first: $record->postal_code_first,
-                second: $record->postal_code_second
+                first: $address['postalCode']['first'],
+                second: $address['postalCode']['second']
             ),
-            prefecture: Prefecture::from($record->prefecture),
-            city: $record->city,
-            street: $record->street,
-            building: $record->building
+            prefecture: Prefecture::from($address['prefecture']),
+            city: $address['city'],
+            street: $address['street'],
+            building: $address['building']
         );
     }
 
     /**
      * レコードから電話番号を復元する.
-     *
-     * @param Record $record
-     * @return PhoneNumber
      */
     protected function restorePhone(Record $record): PhoneNumber
     {
+        $phone = \json_decode($record->phone_number, true);
+
         return new PhoneNumber(
-            areaCode: $record->phone_area_code,
-            localCode: $record->phone_local_code,
-            subscriberNumber: $record->phone_subscriber_number
+            areaCode: $phone['areaCode'],
+            localCode: $phone['localCode'],
+            subscriberNumber: $phone['subscriberNumber']
         );
     }
 
     /**
      * レコードから日時範囲を復元する.
-     *
-     * @param Record $record
-     * @return DateTimeRange
      */
     protected function restoreDateTimeRange(Record $record): DateTimeRange
     {

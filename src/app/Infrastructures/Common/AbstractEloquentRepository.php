@@ -4,7 +4,7 @@ namespace App\Infrastructures\Common;
 
 use App\Exceptions\ConflictException;
 use Illuminate\Database\QueryException;
-use PDOException;
+use Illuminate\Support\Collection;
 
 /**
  * Eloquentを使用するリポジトリの抽象クラス.
@@ -32,7 +32,7 @@ abstract class AbstractEloquentRepository
     /**
      * PDOExceptionが発生した場合の共通例外処理.
      */
-    protected function handlePDOException(PDOException $exception, ...$messages): void
+    protected function handlePDOException(\PDOException $exception): void
     {
         if ($exception instanceof QueryException) {
             $code = $exception->getCode();
@@ -43,11 +43,31 @@ abstract class AbstractEloquentRepository
                 default => \RuntimeException::class,
             };
 
-            $message = \vsprintf(static::DEFAULT_MESSAGE_FORMATS[$code], $messages);
+            $message = match ($code) {
+                self::UNIQUE_CONSTRAINT_CODE => $this->extractDuplicateFields($exception->getMessage()),
+                default => $exception->getMessage(),
+            };
 
             throw new $class($message);
         }
 
         throw $exception;
+    }
+
+    /**
+     * 一意制約違反時の重複フィールドを抽出する.
+     */
+    private function extractDuplicateFields(string $message): string
+    {
+        $fields = new Collection();
+
+        if (preg_match('/Key \((.+?)\)=\((.+?)\) already exists\./', $message, $matches)) {
+            $field = $matches[1];
+            $value = $matches[2];
+
+            $fields->put($field, $value);
+        }
+
+        return $fields->toJson();
     }
 }
