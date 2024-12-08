@@ -2,11 +2,14 @@
 
 namespace App\Infrastructures\Visit;
 
-use App\Domains\Visit\Entities\Visit as Entity;
-use App\Domains\Visit\VisitRepository;
-use App\Domains\Visit\ValueObjects\VisitIdentifier;
 use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Domains\Visit\Entities\Visit as Entity;
+use App\Domains\Visit\ValueObjects\Criteria;
+use App\Domains\Visit\ValueObjects\VisitIdentifier;
 use App\Domains\Visit\ValueObjects\VisitResult;
+use App\Domains\Visit\VisitRepository;
+use App\Infrastructures\Common\AbstractEloquentRepository;
+use App\Infrastructures\Support\Common\EloquentCommonDomainDeflator;
 use App\Infrastructures\Support\Common\EloquentCommonDomainRestorer;
 use App\Infrastructures\Visit\Models\Visit as Record;
 use Carbon\CarbonImmutable;
@@ -14,50 +17,70 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Enumerable;
 
 /**
- * 取引履歴リポジトリ
+ * 取引履歴リポジトリ.
  */
-class EloquentVisitRepository implements VisitRepository
+class EloquentVisitRepository extends AbstractEloquentRepository implements VisitRepository
 {
+    use EloquentCommonDomainDeflator;
     use EloquentCommonDomainRestorer;
 
     /**
      * コンストラクタ.
-     *
-     * @param Record $builder
      */
-    public function __construct(private readonly Record $builder)
+    public function __construct(private readonly Record $builder) {}
+
+    /**
+     * {@inheritDoc}
+     */
+    public function add(Entity $visit): void
     {
+        try {
+            $this->createQuery()
+                ->create([
+                    'identifier' => $visit->identifier()->value(),
+                    'user' => $visit->user()->value(),
+                    'visited_at' => $visit->visitedAt()->toAtomString(),
+                    'phone_number' => \is_null($visit->phone()) ?
+                        null : $this->deflatePhoneNumber($visit->phone()),
+                    'address' => $this->deflateAddress($visit->address()),
+                    'has_graveyard' => $visit->hasGraveyard(),
+                    'note' => $visit->note(),
+                    'result' => $visit->result()->name,
+                ])
+            ;
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception);
+        }
     }
 
     /**
      * {@inheritDoc}
      */
-    public function persist(Entity $transactionHistory): void
+    public function update(Entity $visit): void
     {
-        $phone = $transactionHistory->phone();
-        $address = $transactionHistory->address();
+        $target = $this->createQuery()
+            ->ofIdentifier($visit->identifier())
+            ->first()
+        ;
 
-        $this->createQuery()
-          ->updateOrCreate(
-              ['identifier' => $transactionHistory->identifier()->value()],
-              [
-              'identifier' => $transactionHistory->identifier()->value(),
-              'user' => $transactionHistory->user()->value(),
-              'visited_at' => $transactionHistory->visitedAt()->toAtomString(),
-              'phone_area_code' => $phone?->areaCode(),
-              'phone_local_code' => $phone?->localCode(),
-              'phone_subscriber_number' => $phone?->subscriberNumber(),
-              'postal_code_first' => $address->postalCode()->first(),
-              'postal_code_second' => $address->postalCode()->second(),
-              'prefecture' => $address->prefecture->value,
-              'city' => $address->city(),
-              'street' => $address->street(),
-              'building' => $address->building(),
-              'has_graveyard' => $transactionHistory->hasGraveyard(),
-              'note' => $transactionHistory->note(),
-              'result' => $transactionHistory->result()->name,
-        ]
-          );
+        if (\is_null($target)) {
+            throw new \OutOfBoundsException(\sprintf('Visit not found: %s', $visit->identifier()->value()));
+        }
+
+        try {
+            $target->user = $visit->user()->value();
+            $target->visited_at = $visit->visitedAt()->toAtomString();
+            $target->phone_number = \is_null($visit->phone()) ?
+                null : $this->deflatePhoneNumber($visit->phone());
+            $target->address = $this->deflateAddress($visit->address());
+            $target->has_graveyard = $visit->hasGraveyard();
+            $target->note = $visit->note();
+            $target->result = $visit->result()->name;
+
+            $target->save();
+        } catch (\PDOException $exception) {
+            $this->handlePDOException($exception);
+        }
     }
 
     /**
@@ -66,8 +89,9 @@ class EloquentVisitRepository implements VisitRepository
     public function find(VisitIdentifier $identifier): Entity
     {
         $record = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException(\sprintf('Visit not found: %s', $identifier->value()));
@@ -79,11 +103,13 @@ class EloquentVisitRepository implements VisitRepository
     /**
      * {@inheritDoc}
      */
-    public function list(): Enumerable
+    public function list(Criteria $criteria): Enumerable
     {
         return $this->createQuery()
-          ->get()
-          ->map(fn (Record $record): Entity => $this->restoreEntity($record));
+            ->ofCriteria($criteria)
+            ->get()
+            ->map(fn (Record $record): Entity => $this->restoreEntity($record))
+        ;
     }
 
     /**
@@ -92,8 +118,9 @@ class EloquentVisitRepository implements VisitRepository
     public function delete(VisitIdentifier $identifier): void
     {
         $target = $this->createQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new \OutOfBoundsException(\sprintf('Visit not found: %s', $identifier->value()));
@@ -103,21 +130,7 @@ class EloquentVisitRepository implements VisitRepository
     }
 
     /**
-     * {@inheritDoc}
-     */
-    public function ofUser(UserIdentifier $identifier): Enumerable
-    {
-        $records = $this->createQuery()
-          ->where('user', $identifier->value())
-          ->get();
-
-        return $records->map(fn (Record $record): Entity => $this->restoreEntity($record));
-    }
-
-    /**
      * クエリビルダーを生成する.
-     *
-     * @return Builder
      */
     private function createQuery(): Builder
     {
@@ -126,9 +139,6 @@ class EloquentVisitRepository implements VisitRepository
 
     /**
      * レコードからエンティティを復元する.
-     *
-     * @param Record $record
-     * @return Entity
      */
     private function restoreEntity(Record $record): Entity
     {
@@ -137,7 +147,7 @@ class EloquentVisitRepository implements VisitRepository
             user: new UserIdentifier($record->user),
             visitedAt: CarbonImmutable::parse($record->visited_at),
             address: $this->restoreAddress($record),
-            phone: \is_null($record->phone_area_code) ? null : $this->restorePhone($record),
+            phone: \is_null($record->phone_number) ? null : $this->restorePhone($record),
             hasGraveyard: $record->has_graveyard,
             note: $record->note,
             result: $this->restoreResult($record->result),
@@ -146,9 +156,6 @@ class EloquentVisitRepository implements VisitRepository
 
     /**
      * 訪問結果を復元する.
-     *
-     * @param string $status
-     * @return VisitResult
      */
     private function restoreResult(string $result): VisitResult
     {

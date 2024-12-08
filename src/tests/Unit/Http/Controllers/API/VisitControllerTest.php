@@ -4,6 +4,8 @@ namespace Tests\Unit\Http\Controllers\API;
 
 use App\Domains\Common\ValueObjects\PhoneNumber;
 use App\Domains\Visit\Entities\Visit as Entity;
+use App\Domains\Visit\ValueObjects\Criteria\Sort;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\API\VisitController;
 use App\Http\Encoders\Common\AddressEncoder;
 use App\Http\Encoders\Common\PhoneNumberEncoder;
@@ -11,12 +13,14 @@ use App\Http\Encoders\Visit\VisitEncoder;
 use App\Http\Requests\API\Visit\AddRequest;
 use App\Http\Requests\API\Visit\DeleteRequest;
 use App\Http\Requests\API\Visit\FindRequest;
+use App\Http\Requests\API\Visit\ListRequest;
 use App\Http\Requests\API\Visit\UpdateRequest;
 use App\UseCases\Visit as UseCase;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\Support\Assertions\NullableValueComparable;
 use Tests\Support\DependencyBuildable;
@@ -33,6 +37,8 @@ use Tests\TestCase;
  * @coversNothing
  *
  * @SuppressWarnings(PHPMD.TooManyMethods)
+ *
+ * @internal
  */
 class VisitControllerTest extends TestCase
 {
@@ -43,7 +49,7 @@ class VisitControllerTest extends TestCase
     /**
      * テストに使用するインスタンス.
      */
-    private Enumerable|null $instances;
+    private ?Enumerable $instances;
 
     /**
      * テストに使用するエンコーダ.
@@ -92,9 +98,10 @@ class VisitControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload);
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+        ;
 
         $controller = new VisitController();
 
@@ -118,10 +125,11 @@ class VisitControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $controller = new VisitController();
 
@@ -136,6 +144,62 @@ class VisitControllerTest extends TestCase
     }
 
     /**
+     * @testdox testAddThrowsBadRequestWithUnexpectedException addメソッドに予期しない例外が発生したときBadRequestHttpExceptionがスローされること.
+     */
+    public function testAddThrowsBadRequestWithUnexpectedException(): void
+    {
+        $payload = $this->createPayload($this->instances->first());
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new \UnexpectedValueException())
+        ;
+
+        $controller = new VisitController();
+
+        $request = $this->createJsonRequest(
+            class: AddRequest::class,
+            payload: $payload
+        );
+
+        $this->expectException(BadRequestHttpException::class);
+
+        $controller->add($request, $useCase);
+    }
+
+    /**
+     * @testdox testAddThrowsConflictWithDuplicateIdentifier addメソッドに重複する識別子を与えたときConflictHttpExceptionがスローされること.
+     */
+    public function testAddThrowsConflictWithDuplicateIdentifier(): void
+    {
+        $instance = $this->instances->random();
+
+        $payload = $this->createPayload($instance);
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('add')
+            ->with(...$payload)
+            ->willThrowException(new ConflictException())
+        ;
+
+        $controller = new VisitController();
+
+        $request = $this->createJsonRequest(
+            class: AddRequest::class,
+            payload: $payload
+        );
+
+        $this->expectException(ConflictHttpException::class);
+
+        $controller->add($request, $useCase);
+    }
+
+    /**
      * @testdox testUpdateSuccessReturnsResponse updateメソッドに正常な値を与えたとき正常なレスポンスが返ること.
      */
     public function testUpdateSuccessReturnsResponse(): void
@@ -143,16 +207,17 @@ class VisitControllerTest extends TestCase
         $instance = $this->instances->random();
 
         $next = $this->builder()->create(Entity::class, null, [
-          'identifier' => $instance->identifier(),
+            'identifier' => $instance->identifier(),
         ]);
 
         $payload = $this->createPayload($next);
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload);
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+        ;
 
         $controller = new VisitController();
 
@@ -179,10 +244,41 @@ class VisitControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \InvalidArgumentException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \InvalidArgumentException())
+        ;
+
+        $controller = new VisitController();
+
+        $request = $this->createJsonRequest(
+            class: UpdateRequest::class,
+            payload: $payload,
+            routeParameters: ['identifier' => $instance->identifier()->value()]
+        );
+
+        $this->expectException(BadRequestHttpException::class);
+
+        $controller->update($request, $useCase);
+    }
+
+    /**
+     * @testdox testUpdateThrowsBadRequestWithUnexpectedValueException updateメソッドに不正な値を与えたときBadRequestHttpExceptionがスローされること.
+     */
+    public function testUpdateThrowsBadRequestWithUnexpectedValueException(): void
+    {
+        $instance = $this->instances->random();
+
+        $payload = $this->createPayload($instance);
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \UnexpectedValueException())
+        ;
 
         $controller = new VisitController();
 
@@ -208,10 +304,11 @@ class VisitControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->with(...$payload)
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('update')
+            ->with(...$payload)
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new VisitController();
 
@@ -235,10 +332,11 @@ class VisitControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($expected->identifier()->value())
-          ->willReturn($expected);
+            ->expects($this->once())
+            ->method('find')
+            ->with($expected->identifier()->value())
+            ->willReturn($expected)
+        ;
 
         $controller = new VisitController();
 
@@ -261,10 +359,11 @@ class VisitControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('find')
-          ->with($identifier->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('find')
+            ->with($identifier->value())
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new VisitController();
 
@@ -280,28 +379,59 @@ class VisitControllerTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsResponse listメソッドに正常な値を与えたとき正常なレスポンスが返ること.
+     *
+     * @dataProvider provideConditions
      */
-    public function testListSuccessReturnsResponse(): void
+    public function testListSuccessReturnsResponse(\Closure $closure): void
     {
-        $expected = $this->instances;
+        $conditions = $closure($this);
+
+        $expecteds = $this->createListExpected($conditions);
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('list')
-          ->willReturn($expected);
+            ->expects($this->once())
+            ->method('list')
+            ->with($conditions)
+            ->willReturn($expecteds)
+        ;
 
         $controller = new VisitController();
 
-        $actual = $controller->list($useCase, $this->encoder);
+        $request = $this->createGetRequest(
+            class: ListRequest::class,
+            query: $conditions
+        );
 
-        $expected
-          ->zip(Collection::make($actual['visits']))
-          ->eachSpread(function (?Entity $expected, ?array $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertNotNull($actual);
-              $this->assertEntity($expected, $actual);
-          });
+        $actual = $controller->list($request, $useCase, $this->encoder);
+
+        $expecteds
+            ->zip(Collection::make($actual['visits']))
+            ->eachSpread(function (?Entity $expected, ?array $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertNotNull($actual);
+                $this->assertEntity($expected, $actual);
+            })
+        ;
+    }
+
+    /**
+     * 検索条件を提供するプロバイダ.
+     */
+    public static function provideConditions(): \Generator
+    {
+        yield 'user' => [fn (self $self): array => [
+            'user' => $self->instances->random()->user()->value(),
+        ]];
+
+        yield 'sort' => [fn (self $self): array => [
+            'sort' => $self->builder()->create(Sort::class)->name,
+        ]];
+
+        yield 'fulfilled' => [fn (self $self): array => [
+            'user' => $self->instances->random()->user()->value(),
+            'sort' => $self->builder()->create(Sort::class)->name,
+        ]];
     }
 
     /**
@@ -313,9 +443,10 @@ class VisitControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($instance->identifier()->value());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($instance->identifier()->value())
+        ;
 
         $controller = new VisitController();
 
@@ -340,10 +471,11 @@ class VisitControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('delete')
-          ->with($identifier->value())
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('delete')
+            ->with($identifier->value())
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $controller = new VisitController();
 
@@ -393,12 +525,34 @@ class VisitControllerTest extends TestCase
         $this->assertNullOr(
             $expected->phone(),
             $actual['phone'],
-            function (PhoneNumber $expected, array $actual) use ($phoneEncoder) {
+            function (PhoneNumber $expected, array $actual) use ($phoneEncoder): void {
                 $this->assertSame($phoneEncoder->encode($expected), $actual);
             }
         );
         $this->assertSame($expected->hasGraveyard(), $actual['hasGraveyard']);
         $this->assertSame($expected->note(), $actual['note']);
         $this->assertSame($expected->result()->name, $actual['result']);
+    }
+
+    /**
+     * listメソッドの期待値を生成する.
+     */
+    private function createListExpected(array $conditions): Enumerable
+    {
+        return $this->instances
+            ->when(
+                isset($conditions['user']),
+                fn (Enumerable $instances): Enumerable => $instances->filter(
+                    fn (Entity $instance): bool => $instance->user()->value() === $conditions['user']
+                )
+            )
+            ->when(
+                isset($conditions['sort']),
+                fn (Enumerable $instances): Enumerable => match ($conditions['sort']) {
+                    Sort::VISITED_AT_ASC->name => $instances->sortBy(fn (Entity $instance): \DateTimeInterface => $instance->visitedAt()),
+                    Sort::VISITED_AT_DESC->name => $instances->sortByDesc(fn (Entity $instance): \DateTimeInterface => $instance->visitedAt()),
+                }
+            )
+            ->values();
     }
 }

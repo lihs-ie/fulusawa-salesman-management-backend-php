@@ -6,25 +6,18 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
-return new class () extends Migration {
+return new class extends Migration {
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        Schema::create('visits', function (Blueprint $table) {
+        Schema::create('visits', function (Blueprint $table): void {
             $table->uuid('identifier')->primary();
             $table->uuid('user');
             $table->dateTime('visited_at');
-            $table->string('phone_area_code')->nullable();
-            $table->string('phone_local_code')->nullable();
-            $table->string('phone_subscriber_number')->nullable();
-            $table->string('postal_code_first');
-            $table->string('postal_code_second');
-            $table->tinyInteger('prefecture');
-            $table->string('city');
-            $table->string('street');
-            $table->string('building')->nullable();
+            $table->jsonb('phone_number')->nullable();
+            $table->jsonb('address');
             $table->text('note')->nullable();
             $table->boolean('has_graveyard')->default(false);
             $table->enum(
@@ -35,6 +28,11 @@ return new class () extends Migration {
                     ->all()
             );
             $table->timestamps();
+
+            $table->foreign('user', 'fk_visits_01')
+                ->references('identifier')
+                ->on('users')
+            ;
         });
     }
 
