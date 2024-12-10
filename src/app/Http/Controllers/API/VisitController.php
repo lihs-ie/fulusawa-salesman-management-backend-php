@@ -3,15 +3,18 @@
 namespace App\Http\Controllers\API;
 
 use App\Domains\Visit\Entities\Visit;
+use App\Exceptions\ConflictException;
 use App\Http\Controllers\Controller;
 use App\Http\Encoders\Visit\VisitEncoder;
 use App\Http\Requests\API\Visit\AddRequest;
 use App\Http\Requests\API\Visit\DeleteRequest;
 use App\Http\Requests\API\Visit\FindRequest;
+use App\Http\Requests\API\Visit\ListRequest;
 use App\Http\Requests\API\Visit\UpdateRequest;
 use App\UseCases\Visit as UseCase;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -21,16 +24,13 @@ class VisitController extends Controller
 {
     /**
      * 訪問追加.
-     *
-     * @param AddRequest $request
-     * @param UseCase $useCase
      */
     public function add(AddRequest $request, UseCase $useCase)
     {
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->add(
                 identifier: $parameters['identifier'],
                 user: $parameters['user'],
                 visitedAt: $parameters['visitedAt'],
@@ -42,16 +42,15 @@ class VisitController extends Controller
             );
 
             return new Response('', Response::HTTP_CREATED);
-        } catch (\InvalidArgumentException $exception) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
+        } catch (ConflictException $exception) {
+            throw new ConflictHttpException($exception->getMessage());
         }
     }
 
     /**
      * 訪問更新.
-     *
-     * @param UpdateRequest $request
-     * @param UseCase $useCase
      */
     public function update(
         UpdateRequest $request,
@@ -60,7 +59,7 @@ class VisitController extends Controller
         $parameters = $request->validated();
 
         try {
-            $useCase->persist(
+            $useCase->update(
                 identifier: $parameters['identifier'],
                 user: $parameters['user'],
                 visitedAt: $parameters['visitedAt'],
@@ -72,7 +71,7 @@ class VisitController extends Controller
             );
 
             return new Response('', Response::HTTP_NO_CONTENT);
-        } catch (\InvalidArgumentException $exception) {
+        } catch (\InvalidArgumentException|\UnexpectedValueException $exception) {
             throw new BadRequestHttpException($exception->getMessage());
         } catch (\OutOfBoundsException $exception) {
             throw new NotFoundHttpException($exception->getMessage());
@@ -81,10 +80,6 @@ class VisitController extends Controller
 
     /**
      * 訪問取得.
-     *
-     * @param FindRequest $request
-     * @param UseCase $useCase
-     * @param VisitEncoder $encoder
      */
     public function find(
         FindRequest $request,
@@ -105,22 +100,19 @@ class VisitController extends Controller
     /**
      * 訪問一覧取得.
      */
-    public function list(UseCase $useCase, VisitEncoder $encoder)
+    public function list(ListRequest $request, UseCase $useCase, VisitEncoder $encoder)
     {
-        $visits = $useCase->list();
+        $visits = $useCase->list($request->validated());
 
         return [
-          'visits' => $visits
-            ->map(fn (Visit $visit): array => $encoder->encode($visit))
-            ->all()
+            'visits' => $visits
+                ->map(fn (Visit $visit): array => $encoder->encode($visit))
+                ->all(),
         ];
     }
 
     /**
      * 訪問削除.
-     *
-     * @param DeleteRequest $request
-     * @param UseCase $useCase
      */
     public function delete(DeleteRequest $request, UseCase $useCase)
     {

@@ -3,9 +3,10 @@
 namespace App\Http\Requests\API\Visit;
 
 use App\Http\Requests\API\AbstractGetRequest;
+use App\Validation\Rules;
 
 /**
- * 訪問一覧取得リクエスト
+ * 訪問一覧取得リクエスト.
  */
 class ListRequest extends AbstractGetRequest
 {
@@ -14,6 +15,9 @@ class ListRequest extends AbstractGetRequest
      */
     public function rules(): array
     {
-        return [];
+        return [
+            'user' => ['nullable', 'uuid'],
+            'sort' => ['nullable', new Rules\Visit\Sort()],
+        ];
     }
 }

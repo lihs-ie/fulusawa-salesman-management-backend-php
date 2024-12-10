@@ -2,10 +2,14 @@
 
 namespace Tests\Unit\Infrastructures\Visit;
 
-use App\Domains\Visit\VisitRepository;
-use App\Domains\Visit\Entities\Visit as Entity;
-use App\Domains\Visit\ValueObjects\VisitIdentifier;
 use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Domains\Visit\Entities\Visit as Entity;
+use App\Domains\Visit\ValueObjects\Criteria;
+use App\Domains\Visit\ValueObjects\Criteria\Sort;
+use App\Domains\Visit\ValueObjects\VisitIdentifier;
+use App\Domains\Visit\VisitRepository;
+use App\Exceptions\ConflictException;
+use App\Infrastructures\Support\Common\EloquentCommonDomainDeflator;
 use App\Infrastructures\Visit\EloquentVisitRepository;
 use App\Infrastructures\Visit\Models\Visit as Record;
 use Illuminate\Support\Enumerable;
@@ -19,47 +23,106 @@ use Tests\Unit\Infrastructures\EloquentRepositoryTest;
  * @group visit
  *
  * @coversNothing
+ *
+ * @internal
  */
 class EloquentVisitRepositoryTest extends TestCase
 {
     use DependencyBuildable;
+    use EloquentCommonDomainDeflator;
     use EloquentRepositoryTest;
 
     /**
-     * @testdox testPersistSuccessOnCreate persistメソッドで新規の訪問を永続化できること.
+     * @testdox testAddSuccessPersistEntity addメソッドで新規の訪問を永続化できること.
      */
-    public function testPersistSuccessOnCreate(): void
+    public function testAddSuccessPersistEntity(): void
     {
         $record = $this->pickRecord();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'user' => new UserIdentifier($record->user),
+            'user' => $this->builder()->create(
+                class: UserIdentifier::class,
+                overrides: ['value' => $record->user]
+            ),
         ]);
 
         $repository = $this->createRepository();
 
-        $repository->persist($entity);
+        $repository->add($entity);
 
         $this->assertPersistedRecord($entity);
     }
 
     /**
-     * @testdox testPersistSuccessOnUpdate persistメソッドで既存の訪問を更新できること.
+     * @testdox testAddFailureThrowsConflictExceptionWithDuplicateIdentifier addメソッドで重複した識別子の訪問を永続化しようとすると例外が発生すること.
      */
-    public function testPersistSuccessOnUpdate(): void
+    public function testAddFailureThrowsConflictExceptionWithDuplicateIdentifier(): void
     {
         $record = $this->pickRecord();
 
-        $expected = $this->builder()->create(Entity::class, null, [
-          'identifier' => new VisitIdentifier($record->identifier),
-          'user' => new UserIdentifier($record->user),
+        $entity = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(
+                class: VisitIdentifier::class,
+                overrides: ['value' => $record->identifier]
+            ),
+            'user' => $this->builder()->create(
+                class: UserIdentifier::class,
+                overrides: ['value' => $record->user]
+            ),
         ]);
 
         $repository = $this->createRepository();
 
-        $repository->persist($expected);
+        $this->expectException(ConflictException::class);
+
+        $repository->add($entity);
+    }
+
+    /**
+     * @testdox testUpdateSuccessPersistEntity updateメソッドで既存の訪問を更新できること.
+     */
+    public function testUpdateSuccessPersistEntity(): void
+    {
+        $record = $this->pickRecord();
+
+        $expected = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(
+                class: VisitIdentifier::class,
+                overrides: ['value' => $record->identifier]
+            ),
+            'user' => $this->builder()->create(
+                class: UserIdentifier::class,
+                overrides: ['value' => $record->user]
+            ),
+        ]);
+
+        $repository = $this->createRepository();
+
+        $repository->update($expected);
 
         $this->assertPersistedRecord($expected);
+    }
+
+    /**
+     * @testdox testUpdateFailureThrowsOutOfBoundsExceptionWithMissingIdentifier updateメソッドで存在しない訪問を更新しようとすると例外が発生すること.
+     */
+    public function testUpdateFailureThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
+    {
+        $record = $this->pickRecord();
+
+        $entity = $this->builder()->create(Entity::class, null, [
+            'identifier' => $this->builder()->create(VisitIdentifier::class),
+            'user' => $this->builder()->create(
+                class: UserIdentifier::class,
+                overrides: ['value' => $record->user]
+            ),
+        ]);
+
+        $repository = $this->createRepository();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $repository->update($entity);
     }
 
     /**
@@ -77,46 +140,103 @@ class EloquentVisitRepositoryTest extends TestCase
     }
 
     /**
-     * @testdox testListSuccessReturnsAllEntities listメソッドで全ての訪問を取得できること.
+     * @testdox testFindFailureThrowsOutOfBoundsExceptionWithMissingIdentifier findメソッドで存在しない訪問を取得しようとすると例外が発生すること.
      */
-    public function testListSuccessReturnsAllEntities(): void
+    public function testFindFailureThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
     {
         $repository = $this->createRepository();
 
-        $actuals = $repository->list();
+        $this->expectException(\OutOfBoundsException::class);
 
-        $this->assertSame($this->records->count(), $actuals->count());
-
-        $actuals->each(function ($actual): void {
-            $this->assertInstanceOf(Entity::class, $actual);
-            $this->assertRecordProperties($actual);
-        });
+        $repository->find($this->builder()->create(VisitIdentifier::class));
     }
 
     /**
-     * @testdox testOfUserSuccessReturnsEntities ofUserメソッドで指定したユーザーの訪問を取得できること.
+     * @testdox testListSuccessReturnsEntities listメソッドで訪問のリストを取得できること.
+     *
+     * @dataProvider provideCriteria
      */
-    public function testOfUserSuccessReturnsEntities(): void
+    public function testListSuccessReturnsEntities(\Closure $closure): void
     {
-        $target = $this->pickRecord();
+        $criteria = $closure($this);
 
-        $expecteds = $this->records
-          ->filter(fn (Record $record): bool => $record->user === $target->user);
+        $expecteds = $this->createListExpected($criteria);
 
         $repository = $this->createRepository();
 
-        $actuals = $repository->ofUser(new UserIdentifier($target->user));
-
-        $this->assertInstanceOf(Enumerable::class, $actuals);
+        $actuals = $repository->list($criteria);
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (?Record $expected, $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertNotNull($actual);
-              $this->assertInstanceOf(Entity::class, $actual);
-              $this->assertRecordProperties($actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (?Record $expected, ?Entity $actual): void {
+                $this->assertNotNull($actual);
+                $this->assertNotNull($expected);
+                $this->assertRecordProperties($actual);
+            })
+        ;
+    }
+
+    /**
+     * 検索条件を提供するプロパイダ.
+     */
+    public static function provideCriteria(): \Generator
+    {
+        yield 'empty' => [fn (self $self): Criteria => $self->builder()->create(Criteria::class)];
+
+        yield 'user' => [fn (self $self): Criteria => $self->builder()->create(
+            Criteria::class,
+            null,
+            ['user' => $self->builder()->create(
+                class: UserIdentifier::class,
+                overrides: ['value' => $self->pickRecord()->user]
+            )]
+        )];
+
+        yield 'sort' => [fn (self $self): Criteria => $self->builder()->create(
+            Criteria::class,
+            null,
+            ['sort' => $self->builder()->create(Sort::class)]
+        )];
+
+        yield 'fulfilled' => [fn (self $self): Criteria => $self->builder()->create(
+            Criteria::class,
+            null,
+            [
+                'user' => $self->builder()->create(
+                    class: UserIdentifier::class,
+                    overrides: ['value' => $self->pickRecord()->user]
+                ),
+                'sort' => $self->builder()->create(Sort::class),
+            ]
+        )];
+    }
+
+    /**
+     * @testdox testDeleteSuccessRemoveEntity deleteメソッドで訪問を削除できること.
+     */
+    public function testDeleteSuccessRemoveEntity(): void
+    {
+        $record = $this->pickRecord();
+
+        $repository = $this->createRepository();
+
+        $repository->delete(
+            $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier])
+        );
+
+        $this->assertDatabaseMissing('visits', ['identifier' => $record->identifier]);
+    }
+
+    /**
+     * @testdox testDeleteFailureThrowsOutOfBoundsExceptionWithMissingIdentifier deleteメソッドで存在しない訪問を削除しようとすると例外が発生すること.
+     */
+    public function testDeleteFailureThrowsOutOfBoundsExceptionWithMissingIdentifier(): void
+    {
+        $repository = $this->createRepository();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $repository->delete($this->builder()->create(VisitIdentifier::class));
     }
 
     /**
@@ -141,21 +261,15 @@ class EloquentVisitRepositoryTest extends TestCase
     private function assertPersistedRecord(Entity $entity): void
     {
         $this->assertDatabaseHas('visits', [
-          'identifier' => $entity->identifier()->value(),
-          'user' => $entity->user()->value(),
-          'visited_at' => $entity->visitedAt()->toAtomString(),
-          'phone_area_code' => $entity->phone()?->areaCode(),
-          'phone_local_code' => $entity->phone()?->localCode(),
-          'phone_subscriber_number' => $entity->phone()?->subscriberNumber(),
-          'postal_code_first' => $entity->address()->postalCode()->first(),
-          'postal_code_second' => $entity->address()->postalCode()->second(),
-          'prefecture' => $entity->address()->prefecture()->value,
-          'city' => $entity->address()->city(),
-          'street' => $entity->address()->street(),
-          'building' => $entity->address()->building(),
-          'has_graveyard' => $entity->hasGraveyard(),
-          'note' => $entity->note(),
-          'result' => $entity->result()->name,
+            'identifier' => $entity->identifier()->value(),
+            'user' => $entity->user()->value(),
+            'visited_at' => $entity->visitedAt()->toAtomString(),
+            'phone_number' => \is_null($entity->phone()) ?
+                null : $this->deflatePhoneNumber($entity->phone()),
+            'address' => $this->deflateAddress($entity->address()),
+            'has_graveyard' => $entity->hasGraveyard(),
+            'note' => $entity->note(),
+            'result' => $entity->result()->name,
         ]);
     }
 
@@ -171,17 +285,31 @@ class EloquentVisitRepositoryTest extends TestCase
         $this->assertNotNull($record);
         $this->assertSame($record->identifier, $actual->identifier()->value());
         $this->assertSame($record->user, $actual->user()->value());
-        $this->assertSame($record->phone_area_code, $actual->phone()?->areaCode());
-        $this->assertSame($record->phone_local_code, $actual->phone()?->localCode());
-        $this->assertSame($record->phone_subscriber_number, $actual->phone()?->subscriberNumber());
-        $this->assertSame($record->postal_code_first, $actual->address()->postalCode()->first());
-        $this->assertSame($record->postal_code_second, $actual->address()->postalCode()->second());
-        $this->assertSame($record->prefecture, $actual->address()->prefecture()->value);
-        $this->assertSame($record->city, $actual->address()->city());
-        $this->assertSame($record->street, $actual->address()->street());
-        $this->assertSame($record->building, $actual->address()->building());
+        $this->assertSame($record->phone_number, $this->deflatePhoneNumber($actual->phone()));
+        $this->assertSame($record->address, $this->deflateAddress($actual->address()));
         $this->assertSame($record->has_graveyard, $actual->hasGraveyard());
         $this->assertSame($record->note, $actual->note());
         $this->assertSame($record->result, $actual->result()->name);
+    }
+
+    /**
+     * listメソッドの期待値を生成する.
+     */
+    private function createListExpected(Criteria $criteria): Enumerable
+    {
+        return $this->records
+            ->when(
+                !\is_null($criteria->user()),
+                fn (Enumerable $records) => $records->where('user', $criteria->user()->value())
+            )
+            ->when(
+                !\is_null($criteria->sort()),
+                fn (Enumerable $records) => match ($criteria->sort()) {
+                    Sort::VISITED_AT_ASC => $records->sortBy('visited_at'),
+                    Sort::VISITED_AT_DESC => $records->sortByDesc('visited_at'),
+                }
+            )
+            ->values()
+        ;
     }
 }

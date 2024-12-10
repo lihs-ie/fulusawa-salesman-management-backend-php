@@ -26,6 +26,8 @@ use Tests\TestCase;
  * @coversNothing
  *
  * @SuppressWarnings(PHPMD.TooManyMethods)
+ *
+ * @internal
  */
 class VisitControllerTest extends TestCase
 {
@@ -37,7 +39,7 @@ class VisitControllerTest extends TestCase
     /**
      * テストに使用するレコード.
      */
-    private Enumerable|null $records;
+    private ?Enumerable $records;
 
     /**
      * テストに使用するエンコーダ.
@@ -113,6 +115,48 @@ class VisitControllerTest extends TestCase
     }
 
     /**
+     * @testdox testAddFailureReturnsConflictWithDuplicatedIdentifier 訪問追加APIに重複した識別子でリクエストを行ったとき409エラーが返ること.
+     */
+    public function testAddFailureReturnsConflictWithDuplicatedIdentifier(): void
+    {
+        $record = $this->records->random();
+
+        $payload = $this->createPersistPayloadFromEntity(
+            $this->builder()->create(
+                class: Entity::class,
+                overrides: [
+                    'identifier' => $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier]),
+                    'user' => $this->builder()->create(UserIdentifier::class, null, ['value' => $record->user]),
+                ]
+            )
+        );
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
+            Role::USER
+        );
+
+        $response->assertConflict();
+    }
+
+    /**
+     * @testdox testAddFailureReturnsBadRequestWithMissingUser 訪問追加APIに存在しないユーザーを指定してリクエストを行ったとき400エラーが返ること.
+     */
+    public function testAddFailureReturnsBadRequestWithMissingUser(): void
+    {
+        $payload = $this->createPersistPayloadFromEntity(
+            $this->builder()->create(Entity::class)
+        );
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitAddAPI($payload, $accessToken),
+            Role::USER
+        );
+
+        $response->assertBadRequest();
+    }
+
+    /**
      * @testdox testUpdateSuccessReturnsSuccessfulResponse 訪問更新APIに正しいリクエストを行ったとき正常なレスポンスが返ること.
      */
     public function testUpdateSuccessReturnsSuccessfulResponse(): void
@@ -124,9 +168,9 @@ class VisitControllerTest extends TestCase
                 Entity::class,
                 null,
                 [
-                'identifier' => $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier]),
-                'user' => $this->builder()->create(UserIdentifier::class, null, ['value' => $record->user])
-        ]
+                    'identifier' => $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier]),
+                    'user' => $this->builder()->create(UserIdentifier::class, null, ['value' => $record->user]),
+                ]
             )
         );
 
@@ -151,9 +195,9 @@ class VisitControllerTest extends TestCase
                 Entity::class,
                 null,
                 [
-                'identifier' => $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier]),
-                'user' => $this->builder()->create(UserIdentifier::class, null, ['value' => $record->user])
-        ]
+                    'identifier' => $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier]),
+                    'user' => $this->builder()->create(UserIdentifier::class, null, ['value' => $record->user]),
+                ]
             )
         );
 
@@ -174,9 +218,9 @@ class VisitControllerTest extends TestCase
                 Entity::class,
                 null,
                 [
-                'identifier' => $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier]),
-                'user' => $this->builder()->create(UserIdentifier::class, null, ['value' => $record->user])
-        ]
+                    'identifier' => $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier]),
+                    'user' => $this->builder()->create(UserIdentifier::class, null, ['value' => $record->user]),
+                ]
             )
         );
 
@@ -193,11 +237,44 @@ class VisitControllerTest extends TestCase
      */
     public function testUpdateFailureReturnsNotFoundWithMissingIdentifier(): void
     {
-        $this->markTestSkipped('persistをaddとupdateに分けた後に実装');
+        $payload = $this->createPersistPayloadFromEntity(
+            $this->builder()->create(Entity::class)
+        );
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($payload, $accessToken),
+            Role::USER
+        );
+
+        $response->assertNotFound();
+    }
+
+    /**
+     * @testdox testUpdateFailureReturnsBadRequestWithMissingUser 訪問更新APIに存在しないユーザーを指定してリクエストを行ったとき400エラーが返ること.
+     */
+    public function testUpdateFailureReturnsBadRequestWithMissingUser(): void
+    {
+        $record = $this->records->random();
+
+        $payload = $this->createPersistPayloadFromEntity(
+            $this->builder()->create(
+                Entity::class,
+                null,
+                ['identifier' => $this->builder()->create(VisitIdentifier::class, null, ['value' => $record->identifier])]
+            )
+        );
+
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitUpdateAPI($payload, $accessToken),
+            Role::USER
+        );
+
+        $response->assertBadRequest();
     }
 
     /**
      * @testdox testFindSuccessReturnsSuccessfulResponse 訪問取得APIに正しいリクエストを行ったとき正常なレスポンスが返ること.
+     *
      * @dataProvider provideRole
      */
     public function testFindSuccessReturnsSuccessfulResponse(Role $role): void
@@ -227,6 +304,7 @@ class VisitControllerTest extends TestCase
 
     /**
      * @testdox testFindFailureReturnsNotFoundWithMissingIdentifier 訪問取得APIに存在しない識別子でリクエストを行ったとき404エラーが返ること.
+     *
      * @dataProvider provideRole
      */
     public function testFindFailureReturnsNotFoundWithMissingIdentifier(Role $role): void
@@ -241,14 +319,15 @@ class VisitControllerTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsSuccessfulResponse 訪問一覧取得APIに正しいリクエストを行ったとき正常なレスポンスが返ること.
+     *
      * @dataProvider provideRole
      */
     public function testListSuccessReturnsSuccessfulResponse(Role $role): void
     {
         $expected = [
-          'visits' => $this->records
-            ->map(fn (Record $record): array => $this->createFindExpectedResult($record))
-            ->all(),
+            'visits' => $this->records
+                ->map(fn (Record $record): array => $this->createFindExpectedResult($record))
+                ->all(),
         ];
 
         $response = $this->callAPIWithAuthentication(
@@ -329,7 +408,7 @@ class VisitControllerTest extends TestCase
     /**
      * 訪問追加APIを実行する.
      */
-    private function hitAddAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitAddAPI(array $payload, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'POST',
@@ -342,7 +421,7 @@ class VisitControllerTest extends TestCase
     /**
      * 訪問更新APIを実行する.
      */
-    private function hitUpdateAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitUpdateAPI(array $payload, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'PUT',
@@ -355,8 +434,7 @@ class VisitControllerTest extends TestCase
     /**
      * 訪問取得APIを実行する.
      */
-
-    private function hitFindAPI(string $identifier, string|null $accessToken = null): TestResponse
+    private function hitFindAPI(string $identifier, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
@@ -368,7 +446,7 @@ class VisitControllerTest extends TestCase
     /**
      * 訪問一覧取得APIを実行する.
      */
-    private function hitListAPI(array $conditions = [], string|null $accessToken = null): TestResponse
+    private function hitListAPI(array $conditions = [], ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
@@ -380,7 +458,7 @@ class VisitControllerTest extends TestCase
     /**
      * 訪問削除APIを実行する.
      */
-    private function hitDeleteAPI(string $identifier, string|null $accessToken = null): TestResponse
+    private function hitDeleteAPI(string $identifier, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'DELETE',
@@ -413,20 +491,13 @@ class VisitControllerTest extends TestCase
         $phone = $payload['phone'];
 
         $this->assertDatabaseHas('visits', [
-          'identifier' => $payload['identifier'],
-          'user' => $payload['user'],
-          'visited_at' => $payload['visitedAt'],
-          'phone_area_code' => $phone ? $payload['phone']['areaCode'] : null,
-          'phone_local_code' => $phone ? $payload['phone']['localCode'] : null,
-          'phone_subscriber_number' => $phone ? $payload['phone']['subscriberNumber'] : null,
-          'postal_code_first' => $payload['address']['postalCode']['first'],
-          'postal_code_second' => $payload['address']['postalCode']['second'],
-          'prefecture' => $payload['address']['prefecture'],
-          'city' => $payload['address']['city'],
-          'street' => $payload['address']['street'],
-          'has_graveyard' => $payload['hasGraveyard'],
-          'building' => $payload['address']['building'],
-          'result' => $payload['result'],
+            'identifier' => $payload['identifier'],
+            'user' => $payload['user'],
+            'visited_at' => $payload['visitedAt'],
+            'phone_number' => \is_null($phone) ? null : json_encode($phone),
+            'address' => \json_encode($payload['address']),
+            'has_graveyard' => $payload['hasGraveyard'],
+            'result' => $payload['result'],
         ]);
     }
 
@@ -436,27 +507,14 @@ class VisitControllerTest extends TestCase
     private function createFindExpectedResult(Record $record): array
     {
         return [
-          'identifier' => $record->identifier,
-          'user' => $record->user,
-          'visitedAt' => $record->visited_at->format(\DATE_ATOM),
-          'phone' => $record->phone_area_code ? [
-            'areaCode' => $record->phone_area_code,
-            'localCode' => $record->phone_local_code,
-            'subscriberNumber' => $record->phone_subscriber_number,
-          ] : null,
-          'address' => [
-            'postalCode' => [
-              'first' => $record->postal_code_first,
-              'second' => $record->postal_code_second,
-            ],
-            'prefecture' => $record->prefecture,
-            'city' => $record->city,
-            'street' => $record->street,
-            'building' => $record->building,
-          ],
-          'hasGraveyard' => $record->has_graveyard,
-          'note' => $record->note,
-          'result' => $record->result,
+            'identifier' => $record->identifier,
+            'user' => $record->user,
+            'visitedAt' => $record->visited_at->format(\DATE_ATOM),
+            'phone' => !\is_null($record->phone_number) ? json_decode($record->phone_number, true) : null,
+            'address' => json_decode($record->address, true),
+            'hasGraveyard' => $record->has_graveyard,
+            'note' => $record->note,
+            'result' => $record->result,
         ];
     }
 }
