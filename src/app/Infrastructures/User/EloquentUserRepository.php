@@ -105,6 +105,23 @@ class EloquentUserRepository extends AbstractEloquentRepository implements UserR
     /**
      * {@inheritDoc}
      */
+    public function ofCredentials(MailAddress $email, string $password): Entity
+    {
+        $record = $this->createQuery()
+            ->ofCredentials($email, $password)
+            ->first()
+        ;
+
+        if (\is_null($record)) {
+            throw new \OutOfBoundsException('User not found.');
+        }
+
+        return $this->restoreEntity($record);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public function list(): Enumerable
     {
         return $this->createQuery()

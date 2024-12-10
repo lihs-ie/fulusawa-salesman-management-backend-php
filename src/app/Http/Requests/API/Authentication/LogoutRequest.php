@@ -6,7 +6,7 @@ use App\Http\Controllers\API\LazyThrowable;
 use App\Http\Requests\API\AbstractRequest;
 
 /**
- * ログアウトリクエスト
+ * ログアウトリクエスト.
  */
 class LogoutRequest extends AbstractRequest
 {
@@ -18,7 +18,7 @@ class LogoutRequest extends AbstractRequest
     public function rules(): array
     {
         return [
-          'identifier' => ['required', 'uuid'],
+            'identifier' => ['required', 'uuid'],
         ];
     }
 }

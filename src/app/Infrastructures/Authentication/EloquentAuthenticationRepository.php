@@ -7,19 +7,15 @@ use App\Domains\Authentication\Entities\Authentication as Entity;
 use App\Domains\Authentication\ValueObjects\AuthenticationIdentifier;
 use App\Domains\Authentication\ValueObjects\Token;
 use App\Domains\Authentication\ValueObjects\TokenType;
-use App\Domains\Common\ValueObjects\MailAddress;
+use App\Domains\User\ValueObjects\Role;
 use App\Domains\User\ValueObjects\UserIdentifier;
 use App\Exceptions\InvalidTokenException;
 use App\Infrastructures\Authentication\Models\Authentication as Record;
-use App\Infrastructures\User\Models\User as UserRecord;
 use Carbon\CarbonImmutable;
-use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * 認証リポジトリ
+ * 認証リポジトリ.
  */
 class EloquentAuthenticationRepository implements AuthenticationRepository
 {
@@ -28,38 +24,36 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
      */
     public function __construct(
         private readonly Record $builder,
-        private readonly UserRecord $userBuilder,
         private readonly int $accessTokenTTL,
-        private readonly int $refreshTokenTTL
-    ) {
-    }
+        private readonly int $refreshTokenTTL,
+        private readonly string $tokenableType,
+    ) {}
 
     /**
      * {@inheritDoc}
      */
     public function persist(
         AuthenticationIdentifier $identifier,
-        MailAddress $email,
-        string $password
+        UserIdentifier $user,
+        Role $role
     ): Entity {
-        $userRecord = $this->getUserOfCredential($email, $password);
+        $entity = $this->createEntity($identifier, $user);
 
-        $entity = $this->createEntity($identifier, new UserIdentifier($userRecord->identifier));
-
-        $this->builder
-          ->create(
-              [
-              'identifier' => $identifier->value(),
-              'tokenable_id' => $entity->user()->value(),
-              'tokenable_type' => UserRecord::class,
-              'name' => $userRecord->last_name . $userRecord->first_name,
-              'token' => hash('sha256', $entity->accessToken()->value()),
-              'expires_at' => $entity->accessToken()->expiresAt()->toAtomString(),
-              'refresh_token' => hash('sha256', $entity->refreshToken()->value()),
-              'refresh_token_expires_at' => $entity->refreshToken()->expiresAt()->toAtomString(),
-              'abilities' => [$userRecord->role],
-        ]
-          );
+        $this->createQuery()
+            ->create(
+                [
+                    'identifier' => $identifier->value(),
+                    'tokenable_id' => $entity->user()->value(),
+                    'tokenable_type' => $this->tokenableType,
+                    'name' => 'default',
+                    'token' => $this->hash($entity->accessToken()->value()),
+                    'expires_at' => $entity->accessToken()->expiresAt()->toAtomString(),
+                    'refresh_token' => $this->hash($entity->refreshToken()->value()),
+                    'refresh_token_expires_at' => $entity->refreshToken()->expiresAt()->toAtomString(),
+                    'abilities' => [$role->name],
+                ]
+            )
+        ;
 
         return $entity;
     }
@@ -69,9 +63,10 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
      */
     public function find(AuthenticationIdentifier $identifier): Entity
     {
-        $record = $this->createAuthenticationQuery()
-          ->where('identifier', $identifier->value())
-          ->first();
+        $record = $this->createQuery()
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException('Authentication not found.');
@@ -83,18 +78,12 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
     /**
      * {@inheritDoc}
      */
-    public function introspection(Token $token): bool
+    public function introspection(string $value, TokenType $type): bool
     {
-        $target = $this->createAuthenticationQuery()
-          ->when(
-              $token->type() === TokenType::ACCESS,
-              fn (Builder $query) => $query->where('token', hash('sha256', $token->value()))
-          )
-          ->when(
-              $token->type() === TokenType::REFRESH,
-              fn (Builder $query) => $query->where('refresh_token', hash('sha256', $token->value()))
-          )
-          ->first();
+        $target = $this->createQuery()
+            ->ofToken($value, $type)
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new InvalidTokenException('Token not found.');
@@ -102,7 +91,7 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
 
         $now = CarbonImmutable::now();
 
-        if ($token->type() === TokenType::ACCESS) {
+        if ($type === TokenType::ACCESS) {
             return $now < $target->expires_at;
         }
 
@@ -112,36 +101,32 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
     /**
      * {@inheritDoc}
      */
-    public function refresh(Token $token): Entity
+    public function refresh(string $value, TokenType $type): Entity
     {
-        if ($token->type() !== TokenType::REFRESH) {
+        if ($type !== TokenType::REFRESH) {
             throw new InvalidTokenException('Token type must be refresh.');
         }
 
-        $record = $this->createAuthenticationQuery()
-          ->where('refresh_token', hash('sha256', $token->value()))
-          ->first();
+        $target = $this->createQuery()
+            ->ofToken($value, $type)
+            ->first()
+        ;
 
-        if (\is_null($record) || $record->refresh_token_expires_at < CarbonImmutable::now()) {
+        if (\is_null($target) || $target->refresh_token_expires_at < CarbonImmutable::now()) {
             throw new InvalidTokenException('Refresh token is invalid.');
         }
 
-        $existence = $this->restoreEntity($record);
-
         $next = $this->createEntity(
-            identifier: new AuthenticationIdentifier($record->identifier),
-            user: $existence->user(),
-            refreshToken: $existence->refreshToken()
+            identifier: new AuthenticationIdentifier($target->identifier),
+            user: new UserIdentifier($target->tokenable_id),
         );
 
-        $this->builder
-          ->where('identifier', $next->identifier()->value())
-          ->update([
-            'token' => $next->accessToken()->value(),
-            'expires_at' => $next->accessToken()->expiresAt()->toAtomString(),
-            'refresh_token' => hash('sha256', $next->refreshToken()->value()),
-            'refresh_token_expires_at' => $next->refreshToken()->expiresAt()->toAtomString(),
-          ]);
+        $target->token = $this->hash($next->accessToken()->value());
+        $target->expires_at = $next->accessToken()->expiresAt()->toAtomString();
+        $target->refresh_token = $this->hash($next->refreshToken()->value());
+        $target->refresh_token_expires_at = $next->refreshToken()->expiresAt()->toAtomString();
+
+        $target->save();
 
         return $next;
     }
@@ -149,30 +134,25 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
     /**
      * {@inheritDoc}
      */
-    public function revoke(Token $token): void
+    public function revoke(string $value, TokenType $type): void
     {
-        $target = $this->createAuthenticationQuery()
-          ->when(
-              $token->type() === TokenType::ACCESS,
-              fn (Builder $query) => $query->where('token', hash('sha256', $token->value()))
-          )
-          ->when(
-              $token->type() === TokenType::REFRESH,
-              fn (Builder $query) => $query->where('refresh_token', hash('sha256', $token->value()))
-          );
+        $target = $this->createQuery()
+            ->ofToken($value, $type)
+            ->first()
+        ;
 
         if (\is_null($target)) {
             throw new InvalidTokenException('Token not found.');
         }
 
-        $updateValues = match ($token->type()) {
+        $updateValues = match ($type) {
             TokenType::ACCESS => [
-              'token' => null,
-              'expires_at' => null,
+                'token' => null,
+                'expires_at' => null,
             ],
             TokenType::REFRESH => [
-              'refresh_token' => null,
-              'refresh_token_expires_at' => null,
+                'refresh_token' => null,
+                'refresh_token_expires_at' => null,
             ],
         };
 
@@ -185,8 +165,9 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
     public function logout(AuthenticationIdentifier $identifier): void
     {
         $record = $this->builder
-          ->where('identifier', $identifier->value())
-          ->first();
+            ->ofIdentifier($identifier)
+            ->first()
+        ;
 
         if (\is_null($record)) {
             throw new \OutOfBoundsException('Authentication not found.');
@@ -198,34 +179,9 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
     /**
      * クエリビルダを生成する.
      */
-    private function createAuthenticationQuery()
+    private function createQuery()
     {
-        return $this->builder->with('user');
-    }
-
-    /**
-     * ユーザークエリビルダを生成する.
-     */
-    private function createUserQuery(): Builder
-    {
-        return $this->userBuilder->newQuery();
-    }
-
-    /**
-     * クレデンシャルからユーザーを取得する.
-     */
-    private function getUserOfCredential(MailAddress $email, string $password): UserRecord
-    {
-        $target = $this->createUserQuery()
-          ->where('email', $email->value())
-          ->where('password', $password)
-          ->first();
-
-        if (\is_null($target)) {
-            throw new AuthorizationException('Invalid credentials.');
-        }
-
-        return $target;
+        return $this->builder->newQuery();
     }
 
     /**
@@ -240,13 +196,13 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
                 type: TokenType::ACCESS,
                 value: $this->generateTokenString(),
                 expiresAt: CarbonImmutable::now()
-                ->addMinutes($this->accessTokenTTL)
+                    ->addMinutes($this->accessTokenTTL)
             ),
             refreshToken: new Token(
                 type: TokenType::REFRESH,
                 value: $this->generateTokenString(),
                 expiresAt: $refreshToken?->expiresAt() ?? CarbonImmutable::now()
-                ->addMinutes($this->refreshTokenTTL)
+                    ->addMinutes($this->refreshTokenTTL)
             )
         );
     }
@@ -262,6 +218,14 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
             $tokenEntropy = Str::random(40),
             hash('crc32b', $tokenEntropy)
         );
+    }
+
+    /**
+     * 文字列をハッシュ化する.
+     */
+    private function hash(string $value): string
+    {
+        return \hash('sha256', $value);
     }
 
     /**
@@ -287,8 +251,8 @@ class EloquentAuthenticationRepository implements AuthenticationRepository
             value: $record->token,
             expiresAt: CarbonImmutable::parse(
                 $type === TokenType::ACCESS
-                ? $record->expires_at
-                : $record->refresh_token_expires_at
+                    ? $record->expires_at
+                    : $record->refresh_token_expires_at
             )
         );
     }

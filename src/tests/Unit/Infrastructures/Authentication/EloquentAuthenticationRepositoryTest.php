@@ -7,12 +7,16 @@ use App\Domains\Authentication\Entities\Authentication as Entity;
 use App\Domains\Authentication\ValueObjects\AuthenticationIdentifier;
 use App\Domains\Authentication\ValueObjects\Token;
 use App\Domains\Authentication\ValueObjects\TokenType;
-use App\Domains\Common\ValueObjects\MailAddress;
+use App\Domains\User\ValueObjects\Role;
+use App\Domains\User\ValueObjects\UserIdentifier;
+use App\Exceptions\InvalidTokenException;
 use App\Infrastructures\Authentication\EloquentAuthenticationRepository;
 use App\Infrastructures\Authentication\Models\Authentication as Record;
 use App\Infrastructures\User\Models\User as UserRecord;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Enumerable;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Tests\Support\DependencyBuildable;
 use Tests\TestCase;
 use Tests\Unit\Infrastructures\EloquentRepositoryTest;
@@ -23,11 +27,45 @@ use Tests\Unit\Infrastructures\EloquentRepositoryTest;
  * @group authentication
  *
  * @coversNothing
+ *
+ * @internal
  */
 class EloquentAuthenticationRepositoryTest extends TestCase
 {
     use DependencyBuildable;
     use EloquentRepositoryTest;
+
+    /**
+     * テストに使用するレコード.
+     */
+    private ?Enumerable $records;
+
+    /**
+     * テストで使用するハッシュソルト.
+     */
+    private ?string $hashSalt;
+
+    /**
+     * {@inheritDoc}
+     */
+    public function setUp(): void
+    {
+        parent::setUp();
+
+        $this->hashSalt = Str::random(\mt_rand(1, 255));
+        $this->records = clone $this->createRecords();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function tearDown(): void
+    {
+        $this->hashSalt = null;
+        $this->records = null;
+
+        parent::tearDown();
+    }
 
     /**
      * @testdox testPersistSuccessOnCreate persistメソッドで新規の認証情報を永続化できること.
@@ -40,10 +78,22 @@ class EloquentAuthenticationRepositoryTest extends TestCase
 
         $repository = $this->createRepository();
 
-        $repository->persist($identifier, new MailAddress($user->email), $user->password);
+        $role = match ($user->role) {
+            Role::ADMIN->name => Role::ADMIN,
+            Role::USER->name => Role::USER,
+        };
+
+        $repository->persist(
+            $identifier,
+            $this->builder()->create(
+                class: UserIdentifier::class,
+                overrides: ['value' => $user->identifier]
+            ),
+            role: $role
+        );
 
         $this->assertDatabaseHas('authentications', [
-          'identifier' => $identifier->value(),
+            'identifier' => $identifier->value(),
         ]);
     }
 
@@ -55,7 +105,7 @@ class EloquentAuthenticationRepositoryTest extends TestCase
         $record = $this->pickRecord();
 
         $identifier = $this->builder()->create(AuthenticationIdentifier::class, null, [
-          'value' => $record->identifier,
+            'value' => $record->identifier,
         ]);
 
         $repository = $this->createRepository();
@@ -90,19 +140,19 @@ class EloquentAuthenticationRepositoryTest extends TestCase
         $repository = $this->createRepository();
 
         $accessToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::ACCESS,
-          'value' => $record->token,
-          'expiresAt' => CarbonImmutable::parse($record->expires_at),
+            'type' => TokenType::ACCESS,
+            'value' => $record->token,
+            'expiresAt' => CarbonImmutable::parse($record->expires_at),
         ]);
 
         $refreshToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::REFRESH,
-          'value' => $record->refresh_token,
-          'expiresAt' => CarbonImmutable::parse($record->refresh_token_expires_at),
+            'type' => TokenType::REFRESH,
+            'value' => $record->refresh_token,
+            'expiresAt' => CarbonImmutable::parse($record->refresh_token_expires_at),
         ]);
 
-        $this->assertTrue($repository->introspection($accessToken));
-        $this->assertTrue($repository->introspection($refreshToken));
+        $this->assertTrue($repository->introspection($accessToken->value(), $accessToken->type()));
+        $this->assertTrue($repository->introspection($refreshToken->value(), $refreshToken->type()));
     }
 
     /**
@@ -115,19 +165,19 @@ class EloquentAuthenticationRepositoryTest extends TestCase
         $repository = $this->createRepository();
 
         $accessToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::ACCESS,
-          'value' => $record->token,
-          'expiresAt' => CarbonImmutable::parse($record->expires_at),
+            'type' => TokenType::ACCESS,
+            'value' => $record->token,
+            'expiresAt' => CarbonImmutable::parse($record->expires_at),
         ]);
 
         $refreshToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::REFRESH,
-          'value' => $record->refresh_token,
-          'expiresAt' => CarbonImmutable::parse($record->refresh_token_expires_at),
+            'type' => TokenType::REFRESH,
+            'value' => $record->refresh_token,
+            'expiresAt' => CarbonImmutable::parse($record->refresh_token_expires_at),
         ]);
 
-        $this->assertFalse($repository->introspection($accessToken));
-        $this->assertFalse($repository->introspection($refreshToken));
+        $this->assertFalse($repository->introspection($accessToken->value(), $accessToken->type()));
+        $this->assertFalse($repository->introspection($refreshToken->value(), $refreshToken->type()));
     }
 
     /**
@@ -135,32 +185,28 @@ class EloquentAuthenticationRepositoryTest extends TestCase
      */
     public function testRefreshSuccessfulReturnsRefreshedAuthentication(): void
     {
-        $record = $this->factory(Record::class)->bothValid()->create();
+        $record = $this->factory(Record::class)->roleOf(Role::ADMIN)->bothValid()->create();
 
         $repository = $this->createRepository();
 
         $refreshToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::REFRESH,
-          'value' => $record->refresh_token,
-          'expiresAt' => CarbonImmutable::parse($record->refresh_token_expires_at),
+            'type' => TokenType::REFRESH,
+            'value' => $record->refresh_token,
+            'expiresAt' => CarbonImmutable::parse($record->refresh_token_expires_at),
         ]);
 
-        $actual = $repository->refresh($refreshToken);
+        $actual = $repository->refresh($refreshToken->value(), $refreshToken->type());
 
         $this->assertInstanceOf(Entity::class, $actual);
-        $this->assertSame($record->identifier, $actual->identifier()->value());
-        $this->assertSame($record->tokenable_id, $actual->user()->value());
-        $this->assertNotSame($record->token, $actual->accessToken()->value());
-        $this->assertNotSame($record->refresh_token, $actual->refreshToken()->value());
+        $this->assertFalse(Hash::check($actual->accessToken()->value(), $record->token));
+        $this->assertFalse(Hash::check($actual->refreshToken()->value(), $record->refresh_token));
 
         $this->assertDatabaseHas('authentications', [
-          'identifier' => $actual->identifier()->value(),
-          'tokenable_id' => $actual->user()->value(),
-          'tokenable_type' => UserRecord::class,
-          'token' => $actual->accessToken()->value(),
-          'expires_at' => $actual->accessToken()->expiresAt()->toAtomString(),
-          'refresh_token' => $actual->refreshToken()->value(),
-          'refresh_token_expires_at' => $actual->refreshToken()->expiresAt()->toAtomString(),
+            'identifier' => $actual->identifier()->value(),
+            'tokenable_id' => $actual->user()->value(),
+            'expires_at' => $actual->accessToken()->expiresAt()->toAtomString(),
+            'refresh_token_expires_at' => $actual->refreshToken()->expiresAt()->toAtomString(),
+            'abilities' => \json_encode([Role::ADMIN->name]),
         ]);
     }
 
@@ -174,14 +220,14 @@ class EloquentAuthenticationRepositoryTest extends TestCase
         $repository = $this->createRepository();
 
         $accessToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::ACCESS,
-          'value' => $record->token,
-          'expiresAt' => CarbonImmutable::parse($record->expires_at),
+            'type' => TokenType::ACCESS,
+            'value' => $record->token,
+            'expiresAt' => CarbonImmutable::parse($record->expires_at),
         ]);
 
-        $this->expectException(\UnexpectedValueException::class);
+        $this->expectException(InvalidTokenException::class);
 
-        $repository->refresh($accessToken);
+        $repository->refresh($accessToken->value(), $accessToken->type());
     }
 
     /**
@@ -192,12 +238,12 @@ class EloquentAuthenticationRepositoryTest extends TestCase
         $repository = $this->createRepository();
 
         $refreshToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::REFRESH,
+            'type' => TokenType::REFRESH,
         ]);
 
-        $this->expectException(\OutOfBoundsException::class);
+        $this->expectException(InvalidTokenException::class);
 
-        $repository->refresh($refreshToken);
+        $repository->refresh($refreshToken->value(), $refreshToken->type());
     }
 
     /**
@@ -210,24 +256,24 @@ class EloquentAuthenticationRepositoryTest extends TestCase
         $repository = $this->createRepository();
 
         $accessToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::ACCESS,
-          'value' => $record->token,
+            'type' => TokenType::ACCESS,
+            'value' => $record->token,
         ]);
 
         $refreshToken = $this->builder()->create(Token::class, null, [
-          'type' => TokenType::REFRESH,
-          'value' => $record->refresh_token,
+            'type' => TokenType::REFRESH,
+            'value' => $record->refresh_token,
         ]);
 
-        $repository->revoke($accessToken);
-        $repository->revoke($refreshToken);
+        $repository->revoke($accessToken->value(), $accessToken->type());
+        $repository->revoke($refreshToken->value(), $refreshToken->type());
 
         $this->assertDatabaseHas('authentications', [
-          'identifier' => $record->identifier,
-          'token' => null,
-          'expires_at' => null,
-          'refresh_token' => null,
-          'refresh_token_expires_at' => null,
+            'identifier' => $record->identifier,
+            'token' => null,
+            'expires_at' => null,
+            'refresh_token' => null,
+            'refresh_token_expires_at' => null,
         ]);
     }
 
@@ -246,9 +292,10 @@ class EloquentAuthenticationRepositoryTest extends TestCase
     {
         return new EloquentAuthenticationRepository(
             new Record(),
-            new UserRecord(),
             \mt_rand(1, 10),
-            \mt_rand(1, 10)
+            \mt_rand(1, 10),
+            Str::random(\mt_rand(1, 255)),
+            $this->hashSalt
         );
     }
 

@@ -15,6 +15,8 @@ use Tests\Unit\Http\Requests\API\CommandRequestTest;
  * @group authentication
  *
  * @coversNothing
+ *
+ * @internal
  */
 class LogoutRequestTest extends TestCase
 {
@@ -50,7 +52,7 @@ class LogoutRequestTest extends TestCase
     protected function createDefaultPayload(): array
     {
         return [
-          'identifier' => Uuid::uuid7()->toString(),
+            'identifier' => Uuid::uuid7()->toString(),
         ];
     }
 
@@ -60,7 +62,7 @@ class LogoutRequestTest extends TestCase
     protected function getValidPayloadPatterns(): array
     {
         return [
-          'default' => []
+            'default' => [],
         ];
     }
 
@@ -70,11 +72,11 @@ class LogoutRequestTest extends TestCase
     protected function getInvalidPayloadPatterns(): array
     {
         return [
-          'identifier' => [
-            'invalid type' => 123,
-            'empty' => '',
-            'invalid format' => 'invalid',
-          ],
+            'identifier' => [
+                'invalid type' => 123,
+                'empty' => '',
+                'invalid format' => 'invalid',
+            ],
         ];
     }
 

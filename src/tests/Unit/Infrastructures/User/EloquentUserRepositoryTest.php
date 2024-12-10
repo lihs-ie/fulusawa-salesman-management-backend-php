@@ -184,6 +184,35 @@ class EloquentUserRepositoryTest extends TestCase
     }
 
     /**
+     * @testdox testOfCredentialsSuccessReturnsEntity クレデンシャルからユーザーを取得できること.
+     */
+    public function testOfCredentialsSuccessReturnsEntity(): void
+    {
+        $record = $this->pickRecord();
+
+        $repository = $this->createRepository();
+
+        $actual = $repository->ofCredentials(
+            $this->builder()->create(MailAddress::class, null, ['value' => $record->email]),
+            $record->password
+        );
+
+        $this->assertPropertyOf($actual);
+    }
+
+    /**
+     * @testdox testOfCredentialsFailureThrowsOutOfBoundsExceptionWithMissingCredentials 存在しないクレデンシャルでユーザーを取得しようとすると例外が発生すること.
+     */
+    public function testOfCredentialsFailureThrowsOutOfBoundsExceptionWithMissingCredentials(): void
+    {
+        $repository = $this->createRepository();
+
+        $this->expectException(\OutOfBoundsException::class);
+
+        $repository->ofCredentials($this->builder()->create(MailAddress::class), 'password');
+    }
+
+    /**
      * @testdox testListSuccessReturnsEntities ユーザー一覧を取得できること.
      */
     public function testListSuccessReturnsEntities(): void

@@ -6,9 +6,9 @@ use App\Domains\Authentication\AuthenticationRepository;
 use App\Domains\Authentication\Entities\Authentication as Entity;
 use App\Domains\Authentication\ValueObjects\Token;
 use App\Domains\Authentication\ValueObjects\TokenType;
-use App\Domains\Common\ValueObjects\MailAddress;
+use App\Domains\User\Entities\User;
+use App\Domains\User\UserRepository;
 use App\UseCases\Authentication as UseCase;
-use App\UseCases\Factories\CommonDomainFactory;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuildable;
 use Tests\TestCase;
@@ -19,6 +19,8 @@ use Tests\TestCase;
  * @group authentication
  *
  * @coversNothing
+ *
+ * @internal
  */
 class AuthenticationTest extends TestCase
 {
@@ -26,9 +28,14 @@ class AuthenticationTest extends TestCase
     use PersistUseCaseTest;
 
     /**
-     * テストに使用するインスタンス.
+     * テストに使用する認証インスタンス.
      */
-    private Enumerable $instances;
+    private Enumerable $authentications;
+
+    /**
+     * テストに使用するユーザーインスタンス.
+     */
+    private Enumerable $users;
 
     /**
      * {@inheritDoc}
@@ -37,7 +44,8 @@ class AuthenticationTest extends TestCase
     {
         parent::setUp();
 
-        $this->instances = clone $this->createInstances();
+        $this->authentications = clone $this->createAuthentications();
+        $this->users = clone $this->createUsers();
     }
 
     /**
@@ -45,17 +53,16 @@ class AuthenticationTest extends TestCase
      */
     public function testPersistSuccessInCaseOnCreate(): void
     {
-        $email = $this->builder()->create(MailAddress::class);
-        $password = 'test-password';
-
         $expected = $this->builder()->create(Entity::class);
 
         [$useCase] = $this->createEmptyPersistedUseCase();
 
+        $user = $this->users->random();
+
         $actual = $useCase->persist(
             identifier: $expected->identifier()->value(),
-            email: $email->value(),
-            password: $password
+            email: $user->email()->value(),
+            password: $user->password(),
         );
 
         $this->assertTrue($expected->identifier()->equals($actual->identifier()));
@@ -71,7 +78,7 @@ class AuthenticationTest extends TestCase
             'refreshToken' => $this->createToken(TokenType::REFRESH, now()->addHour()),
         ]);
 
-        $this->instances = clone $this->instances->concat([$instance]);
+        $this->authentications = clone $this->authentications->concat([$instance]);
 
         [$useCase] = $this->createPersistUseCase();
 
@@ -79,7 +86,10 @@ class AuthenticationTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($instance);
 
-        $actual = $useCase->introspection(token: $parameters['accessToken']);
+        $actual = $useCase->introspection(
+            value: $parameters['accessToken']['value'],
+            type: $parameters['accessToken']['type']
+        );
 
         $this->assertTrue($actual);
     }
@@ -94,7 +104,7 @@ class AuthenticationTest extends TestCase
             'refreshToken' => $this->createToken(TokenType::REFRESH, now()->addHour()),
         ]);
 
-        $this->instances = clone $this->instances->concat([$instance]);
+        $this->authentications = clone $this->authentications->concat([$instance]);
 
         [$useCase] = $this->createPersistUseCase();
 
@@ -102,7 +112,10 @@ class AuthenticationTest extends TestCase
 
         $parameters = $this->createParametersFromEntity($instance);
 
-        $actual = $useCase->introspection(token: $parameters['refreshToken']);
+        $actual = $useCase->introspection(
+            value: $parameters['refreshToken']['value'],
+            type: $parameters['refreshToken']['type']
+        );
 
         $this->assertTrue($actual);
     }
@@ -118,13 +131,16 @@ class AuthenticationTest extends TestCase
             'accessToken' => $expired,
         ]);
 
-        $this->instances = clone $this->instances->concat([$instance]);
+        $this->authentications = clone $this->authentications->concat([$instance]);
 
         [$useCase] = $this->createPersistUseCase();
 
         $parameters = $this->createParametersFromEntity($instance);
 
-        $actual = $useCase->introspection(token: $parameters['accessToken']);
+        $actual = $useCase->introspection(
+            value: $parameters['accessToken']['value'],
+            type: $parameters['accessToken']['type']
+        );
 
         $this->assertFalse($actual);
     }
@@ -140,13 +156,16 @@ class AuthenticationTest extends TestCase
             'refreshToken' => $expired,
         ]);
 
-        $this->instances = clone $this->instances->concat([$instance]);
+        $this->authentications = clone $this->authentications->concat([$instance]);
 
         [$useCase] = $this->createPersistUseCase();
 
         $parameters = $this->createParametersFromEntity($instance);
 
-        $actual = $useCase->introspection(token: $parameters['refreshToken']);
+        $actual = $useCase->introspection(
+            value: $parameters['refreshToken']['value'],
+            type: $parameters['refreshToken']['type']
+        );
 
         $this->assertFalse($actual);
     }
@@ -160,13 +179,16 @@ class AuthenticationTest extends TestCase
             'refreshToken' => $this->createToken(TokenType::REFRESH, now()->addHour()),
         ]);
 
-        $this->instances = clone $this->instances->concat([$existence]);
+        $this->authentications = clone $this->authentications->concat([$existence]);
 
         [$useCase] = $this->createPersistUseCase();
 
         $parameters = $this->createParametersFromEntity($existence);
 
-        $actual = $useCase->refresh($parameters['refreshToken']);
+        $actual = $useCase->refresh(
+            value: $parameters['refreshToken']['value'],
+            type: $parameters['refreshToken']['type']
+        );
 
         $this->assertTrue($existence->identifier()->equals($actual->identifier()));
         $this->assertFalse($existence->accessToken()->equals($actual->accessToken()));
@@ -178,21 +200,25 @@ class AuthenticationTest extends TestCase
      */
     public function testRevokeSuccess(): void
     {
-        $target = $this->instances->random();
+        $target = $this->authentications->random();
 
         [$removed, $onRemove] = $this->createRemoveHandler();
 
         $parameters = $this->createParametersFromEntity($target);
 
         $useCase = new UseCase(
-            repository: $this->builder()->create(
+            authRepository: $this->builder()->create(
                 AuthenticationRepository::class,
                 null,
-                ['instances' => $this->instances, 'onRemove' => $onRemove]
+                ['instances' => $this->authentications, 'onRemove' => $onRemove]
             ),
+            userRepository: $this->builder()->create(UserRepository::class),
         );
 
-        $useCase->revoke($parameters['accessToken']);
+        $useCase->revoke(
+            value: $parameters['accessToken']['value'],
+            type: $parameters['accessToken']['type']
+        );
 
         $actual = $removed->first(
             fn (Entity $entity): bool => $entity->identifier()->equals($target->identifier())
@@ -210,10 +236,15 @@ class AuthenticationTest extends TestCase
         [$persisted, $onPersisted] = $this->createPersistHandler();
 
         $useCase = new UseCase(
-            repository: $this->builder()->create(
+            authRepository: $this->builder()->create(
                 AuthenticationRepository::class,
                 null,
                 ['onPersist' => $onPersisted]
+            ),
+            userRepository: $this->builder()->create(
+                UserRepository::class,
+                null,
+                ['instances' => $this->users]
             ),
         );
 
@@ -228,10 +259,15 @@ class AuthenticationTest extends TestCase
         [$persisted, $onPersisted] = $this->createPersistHandler();
 
         $useCase = new UseCase(
-            repository: $this->builder()->create(
+            authRepository: $this->builder()->create(
                 AuthenticationRepository::class,
                 null,
-                ['instances' => $this->instances, 'onPersist' => $onPersisted]
+                ['instances' => $this->authentications, 'onPersist' => $onPersisted]
+            ),
+            userRepository: $this->builder()->create(
+                UserRepository::class,
+                null,
+                ['instances' => $this->users]
             ),
         );
 
@@ -252,11 +288,19 @@ class AuthenticationTest extends TestCase
     }
 
     /**
-     * テストに使用するインスタンスを生成するへルパ.
+     * テストに使用する認証インスタンスを生成するへルパ.
      */
-    private function createInstances(array $overrides = []): Enumerable
+    private function createAuthentications(array $overrides = []): Enumerable
     {
         return $this->builder()->createList(Entity::class, \mt_rand(5, 10), $overrides);
+    }
+
+    /**
+     * テストに使用するユーザーインスタンスを生成するへルパ.
+     */
+    private function createUsers(array $overrides = []): Enumerable
+    {
+        return $this->builder()->createList(User::class, \mt_rand(5, 10), $overrides);
     }
 
     /**

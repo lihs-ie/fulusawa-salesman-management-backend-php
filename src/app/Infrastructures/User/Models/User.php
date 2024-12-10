@@ -2,6 +2,7 @@
 
 namespace App\Infrastructures\User\Models;
 
+use App\Domains\Common\ValueObjects\MailAddress;
 use App\Domains\User\ValueObjects\UserIdentifier;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -69,6 +70,17 @@ class User extends Authenticatable
     public function scopeOfIdentifier(Builder $query, UserIdentifier $identifier): Builder
     {
         return $query->where('identifier', $identifier->value());
+    }
+
+    /**
+     * クレデンシャルに紐づくレコードを取得する.
+     */
+    public function scopeOfCredentials(Builder $query, MailAddress $email, string $password): void
+    {
+        $query
+            ->where('email', $email->value())
+            ->where('password', $password)
+        ;
     }
 
     /**

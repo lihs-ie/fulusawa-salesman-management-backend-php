@@ -7,10 +7,9 @@ use App\Domains\Authentication\Entities\Authentication;
 use App\Domains\Authentication\ValueObjects\AuthenticationIdentifier;
 use App\Domains\Authentication\ValueObjects\Token;
 use App\Domains\Authentication\ValueObjects\TokenType;
-use App\Domains\Common\ValueObjects\MailAddress;
+use App\Domains\User\ValueObjects\Role;
+use App\Domains\User\ValueObjects\UserIdentifier;
 use Carbon\CarbonImmutable;
-use Closure;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuilder;
 use Tests\Support\DependencyFactory;
@@ -27,20 +26,19 @@ class AuthenticationRepositoryFactory extends DependencyFactory
      */
     public function create(DependencyBuilder $builder, int $seed, array $overrides): AuthenticationRepository
     {
-        $instances = $overrides['instances'] ?? $builder->createList(Authentication::class, (\abs($seed) % 10), $overrides);
+        $instances = $overrides['instances'] ?? $builder->createList(Authentication::class, \abs($seed) % 10, $overrides);
         $onPersist = $overrides['onPersist'] ?? null;
         $onRemove = $overrides['onRemove'] ?? null;
 
-        return new class ($instances, $onPersist, $onRemove, $builder) implements AuthenticationRepository {
+        return new class($instances, $onPersist, $onRemove, $builder) implements AuthenticationRepository {
             private Enumerable $instances;
 
             public function __construct(
                 Enumerable $instances,
-                private readonly ?Closure $onPersist,
-                private readonly ?Closure $onRemove,
+                private readonly ?\Closure $onPersist,
+                private readonly ?\Closure $onRemove,
                 private readonly DependencyBuilder $builder
             ) {
-
                 $this->instances = $instances->mapWithKeys(
                     fn (Authentication $token): array => [$token->identifier()->value() => $token]
                 );
@@ -49,8 +47,11 @@ class AuthenticationRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function persist(AuthenticationIdentifier $identifier, MailAddress $email, string $password): Authentication
-            {
+            public function persist(
+                AuthenticationIdentifier $identifier,
+                UserIdentifier $user,
+                Role $role
+            ): Authentication {
                 $entity = $this->builder->create(Authentication::class, null, [
                     'identifier' => $identifier,
                 ]);
@@ -60,8 +61,8 @@ class AuthenticationRepositoryFactory extends DependencyFactory
                 );
 
                 if (!\is_null($existence)) {
-                    $access = $this->introspection($existence->access());
-                    $refresh = $this->introspection($existence->refresh());
+                    $access = $this->introspection($existence->accessToken()->value(), TokenType::ACCESS);
+                    $refresh = $this->introspection($existence->refreshToken()->value(), TokenType::REFRESH);
 
                     if ($access && $refresh) {
                         return $existence;
@@ -98,22 +99,21 @@ class AuthenticationRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function introspection(Token $token): bool
+            public function introspection(string $value, TokenType $type): bool
             {
                 $instance = $this->instances
-                    ->first(function (Authentication $instance) use ($token): bool {
-                        $type = $token->type();
-
+                    ->first(function (Authentication $instance) use ($value, $type): bool {
                         return $type === TokenType::ACCESS ?
-                            $instance->accessToken()->equals($token) :
-                            $instance->refreshToken()->equals($token);
-                    });
+                            $instance->accessToken()->value() === $value :
+                            $instance->refreshToken()->value() === $value;
+                    })
+                ;
 
                 if (\is_null($instance)) {
                     return false;
                 }
 
-                $target = $token->type() === TokenType::ACCESS ?
+                $target = $type === TokenType::ACCESS ?
                     $instance->accessToken() :
                     $instance->refreshToken();
 
@@ -123,14 +123,14 @@ class AuthenticationRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function refresh(Token $token): Authentication
+            public function refresh(string $value, TokenType $type): Authentication
             {
-                if ($token->type() !== TokenType::REFRESH) {
+                if ($type !== TokenType::REFRESH) {
                     throw new \InvalidArgumentException('Token type is invalid.');
                 }
 
                 $instance = $this->instances->first(
-                    fn (Authentication $instance): bool => $instance->refreshToken()->equals($token)
+                    fn (Authentication $instance): bool => $instance->refreshToken()->value() === $value
                 );
 
                 $next = $this->builder->create(Authentication::class, null, [
@@ -149,18 +149,17 @@ class AuthenticationRepositoryFactory extends DependencyFactory
             /**
              * {@inheritdoc}
              */
-            public function revoke(Token $token): void
+            public function revoke(string $value, TokenType $type): void
             {
-                $type = $token->type();
-
                 $target = $this->instances
-                    ->when($token->type() === TokenType::ACCESS, fn (Enumerable $collection): Enumerable => $collection->filter(
-                        fn (Authentication $instance): bool => $instance->accessToken()->equals($token)
+                    ->when($type === TokenType::ACCESS, fn (Enumerable $collection): Enumerable => $collection->filter(
+                        fn (Authentication $instance): bool => $instance->accessToken()->value() === $value
                     ))
-                    ->when($token->type() === TokenType::REFRESH, fn (Enumerable $collection): Enumerable => $collection->filter(
-                        fn (Authentication $instance): bool => $instance->refreshToken()->equals($token)
+                    ->when($type === TokenType::REFRESH, fn (Enumerable $collection): Enumerable => $collection->filter(
+                        fn (Authentication $instance): bool => $instance->refreshToken()->value() === $value
                     ))
-                    ->first();
+                    ->first()
+                ;
 
                 $revoked = $this->builder->create(Authentication::class, null, [
                     'identifier' => $target->identifier(),

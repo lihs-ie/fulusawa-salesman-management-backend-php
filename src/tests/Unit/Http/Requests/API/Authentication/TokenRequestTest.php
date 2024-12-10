@@ -16,6 +16,8 @@ use Tests\Unit\Http\Requests\API\CommandRequestTest;
  * @group authentication
  *
  * @coversNothing
+ *
+ * @internal
  */
 class TokenRequestTest extends TestCase
 {
@@ -51,9 +53,9 @@ class TokenRequestTest extends TestCase
     protected function createDefaultPayload(): array
     {
         return [
-          'type' => TokenType::ACCESS->name,
-          'value' => Hash::make('password'),
-          'expiresAt' => now()->addDay()->toDateTimeString(),
+            'type' => TokenType::ACCESS->name,
+            'value' => Hash::make('password'),
+            'expiresAt' => now()->addDay()->toDateTimeString(),
         ];
     }
 
@@ -63,11 +65,10 @@ class TokenRequestTest extends TestCase
     protected function getValidPayloadPatterns(): array
     {
         return [
-          'refresh' => [
-            'type' => TokenType::REFRESH->name,
-            'value' => Hash::make('password'),
-            'expiresAt' => now()->addDay()->toDateTimeString(),
-          ]
+            'refresh' => [
+                'type' => TokenType::REFRESH->name,
+                'value' => Hash::make('password'),
+            ],
         ];
     }
 
@@ -77,20 +78,15 @@ class TokenRequestTest extends TestCase
     protected function getInvalidPayloadPatterns(): array
     {
         return [
-          'type' => [
-            'invalid type' => 123,
-            'empty' => '',
-            'invalid format' => 'invalid',
-          ],
-          'value' => [
-            'invalid type' => 123,
-            'empty' => '',
-          ],
-          'expiresAt' => [
-            'invalid type' => 123,
-            'empty' => '',
-            'invalid format' => 'invalid',
-          ],
+            'type' => [
+                'invalid type' => 123,
+                'empty' => '',
+                'invalid format' => 'invalid',
+            ],
+            'value' => [
+                'invalid type' => 123,
+                'empty' => '',
+            ],
         ];
     }
 
