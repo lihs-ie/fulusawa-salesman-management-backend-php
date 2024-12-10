@@ -13,7 +13,7 @@ use App\Domains\TransactionHistory\ValueObjects\TransactionHistoryIdentifier;
 use App\Exceptions\ConflictException;
 use App\Infrastructures\Customer\EloquentCustomerRepository;
 use App\Infrastructures\Customer\Models\Customer as Record;
-use Closure;
+use App\Infrastructures\Support\Common\EloquentCommonDomainDeflator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Enumerable;
 use Tests\Support\DependencyBuildable;
@@ -26,14 +26,18 @@ use Tests\Unit\Infrastructures\EloquentRepositoryTest;
  * @group customer
  *
  * @coversNothing
+ *
+ * @internal
  */
 class EloquentCustomerRepositoryTest extends TestCase
 {
     use DependencyBuildable;
+    use EloquentCommonDomainDeflator;
     use EloquentRepositoryTest;
 
     /**
      * @testdox testAddSuccessPersistEntity addメソッドに正しいエンティティを与えたとき永続化できること.
+     *
      * @dataProvider provideEntityOverrides
      */
     public function testAddSuccessPersistEntity(\Closure $overrides): void
@@ -53,21 +57,21 @@ class EloquentCustomerRepositoryTest extends TestCase
     public static function provideEntityOverrides(): \Generator
     {
         yield 'cemeteries and transactionHistories are empty' => [fn (self $self): array => [
-          'cemeteries' => null,
-          'transactionHistories' => null,
+            'cemeteries' => null,
+            'transactionHistories' => null,
         ]];
 
         yield 'has cemetery' => [fn (self $self): array => [
-          'cemeteries' => $self->builder()->createList(CemeteryIdentifier::class, \mt_rand(1, 3)),
+            'cemeteries' => $self->builder()->createList(CemeteryIdentifier::class, \mt_rand(1, 3)),
         ]];
 
         yield 'has transaction history' => [fn (self $self): array => [
-          'transactionHistories' => $self->builder()->createList(TransactionHistoryIdentifier::class, \mt_rand(1, 3)),
+            'transactionHistories' => $self->builder()->createList(TransactionHistoryIdentifier::class, \mt_rand(1, 3)),
         ]];
 
         yield 'has cemetery and transaction history' => [fn (self $self): array => [
-          'cemeteries' => $self->builder()->createList(CemeteryIdentifier::class, \mt_rand(1, 3)),
-          'transactionHistories' => $self->builder()->createList(TransactionHistoryIdentifier::class, \mt_rand(1, 3)),
+            'cemeteries' => $self->builder()->createList(CemeteryIdentifier::class, \mt_rand(1, 3)),
+            'transactionHistories' => $self->builder()->createList(TransactionHistoryIdentifier::class, \mt_rand(1, 3)),
         ]];
     }
 
@@ -79,11 +83,11 @@ class EloquentCustomerRepositoryTest extends TestCase
         $record = $this->pickRecord();
 
         $entity = $this->builder()->create(Entity::class, null, [
-          'identifier' => $this->builder()->create(
-              CustomerIdentifier::class,
-              null,
-              ['value' => $record->identifier]
-          )
+            'identifier' => $this->builder()->create(
+                CustomerIdentifier::class,
+                null,
+                ['value' => $record->identifier]
+            ),
         ]);
 
         $repository = $this->createRepository();
@@ -101,7 +105,7 @@ class EloquentCustomerRepositoryTest extends TestCase
         $record = $this->pickRecord();
 
         $expected = $this->builder()->create(Entity::class, null, [
-          'identifier' => new CustomerIdentifier($record->identifier)
+            'identifier' => new CustomerIdentifier($record->identifier),
         ]);
 
         $repository = $this->createRepository();
@@ -143,25 +147,29 @@ class EloquentCustomerRepositoryTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsEntities 顧客一覧を取得できること.
+     *
      * @dataProvider provideCriteria
      */
-    public function testListSuccessReturnsEntities(Closure $criteria): void
+    public function testListSuccessReturnsEntities(\Closure $closure): void
     {
         $repository = $this->createRepository();
 
         $record = $this->pickRecord();
 
-        $actuals = $repository->list($criteria($this, $record));
+        $criteria = $closure($this, $record);
 
-        $expecteds = $this->createListExpected($criteria($this, $record));
+        $actuals = $repository->list($criteria);
+
+        $expecteds = $this->createListExpected($criteria);
 
         $expecteds
-          ->zip($actuals)
-          ->eachSpread(function (?Record $expected, ?Entity $actual): void {
-              $this->assertNotNull($expected);
-              $this->assertNotNull($actual);
-              $this->assertPropertyOf($actual);
-          });
+            ->zip($actuals)
+            ->eachSpread(function (?Record $expected, ?Entity $actual): void {
+                $this->assertNotNull($expected);
+                $this->assertNotNull($actual);
+                $this->assertPropertyOf($actual);
+            })
+        ;
     }
 
     /**
@@ -173,32 +181,42 @@ class EloquentCustomerRepositoryTest extends TestCase
             Criteria::class,
             null,
             [
-            'name' => $record->first_name,
-      ]
+                'name' => $record->first_name,
+            ]
         )];
 
-        yield 'phone' => [fn (self $self, Record $record): Criteria => $self->builder()->create(
-            Criteria::class,
-            null,
-            [
-            'phone' => $self->builder()->create(PhoneNumber::class, null, [
-              'areaCode' => $record->phone_area_code,
-              'localCode' => $record->phone_local_code,
-              'subscriberNumber' => $record->phone_subscriber_number,
-            ]),
-      ]
-        )];
+        yield 'phone' => [
+            function (self $self, Record $record): Criteria {
+                $phone = json_decode($record->phone_number, true);
 
-        yield 'postal code' => [fn (self $self, Record $record): Criteria => $self->builder()->create(
-            Criteria::class,
-            null,
-            [
-            'postalCode' => $self->builder()->create(PostalCode::class, null, [
-              'first' => $record->postal_code_first,
-              'second' => $record->postal_code_second,
-            ]),
-      ]
-        )];
+                return $self->builder()->create(
+                    Criteria::class,
+                    null,
+                    [
+                        'phone' => $self->builder()->create(PhoneNumber::class, null, [
+                            'areaCode' => $phone['areaCode'],
+                            'localCode' => $phone['localCode'],
+                            'subscriberNumber' => $phone['subscriberNumber'],
+                        ]),
+                    ]
+                );
+            },
+        ];
+
+        yield 'postal code' => [function (self $self, Record $record): Criteria {
+            $address = json_decode($record->address, true);
+
+            return $self->builder()->create(
+                Criteria::class,
+                null,
+                [
+                    'postalCode' => $self->builder()->create(PostalCode::class, null, [
+                        'first' => $address['postalCode']['first'],
+                        'second' => $address['postalCode']['second'],
+                    ]),
+                ]
+            );
+        }];
     }
 
     /**
@@ -236,7 +254,8 @@ class EloquentCustomerRepositoryTest extends TestCase
     protected function createRecords(): Enumerable
     {
         return $this->factory(Record::class)
-          ->createMany(\mt_rand(5, 10));
+            ->createMany(\mt_rand(5, 10))
+        ;
     }
 
     /**
@@ -253,32 +272,27 @@ class EloquentCustomerRepositoryTest extends TestCase
     private function assertPersistedRecord(Entity $entity): void
     {
         $cemeteries = $entity->cemeteries()
-          ->map(
-              fn (CemeteryIdentifier $cemetery): string => $cemetery->value()
-          )
-          ->all();
+            ->map(
+                fn (CemeteryIdentifier $cemetery): string => $cemetery->value()
+            )
+            ->all()
+        ;
 
         $transactionHistories = $entity->transactionHistories()
-          ->map(
-              fn (TransactionHistoryIdentifier $transactionHistory): string => $transactionHistory->value()
-          )
-          ->all();
+            ->map(
+                fn (TransactionHistoryIdentifier $transactionHistory): string => $transactionHistory->value()
+            )
+            ->all()
+        ;
 
         $this->assertDatabaseHas('customers', [
-          'identifier' => $entity->identifier()->value(),
-          'first_name' => $entity->firstName(),
-          'last_name' => $entity->lastName(),
-          'postal_code_first' => $entity->address()->postalCode()->first(),
-          'postal_code_second' => $entity->address()->postalCode()->second(),
-          'prefecture' => $entity->address()->prefecture()->value,
-          'city' => $entity->address()->city(),
-          'street' => $entity->address()->street(),
-          'building' => $entity->address()->building(),
-          'phone_area_code' => $entity->phone()->areaCode(),
-          'phone_local_code' => $entity->phone()->localCode(),
-          'phone_subscriber_number' => $entity->phone()->subscriberNumber(),
-          'cemeteries' => \json_encode($cemeteries),
-          'transaction_histories' => \json_encode($transactionHistories),
+            'identifier' => $entity->identifier()->value(),
+            'first_name' => $entity->firstName(),
+            'last_name' => $entity->lastName(),
+            'address' => $this->deflateAddress($entity->address()),
+            'phone_number' => $this->deflatePhoneNumber($entity->phone()),
+            'cemeteries' => \json_encode($cemeteries),
+            'transaction_histories' => \json_encode($transactionHistories),
         ]);
     }
 
@@ -294,33 +308,28 @@ class EloquentCustomerRepositoryTest extends TestCase
         $this->assertNotNull($record);
         $this->assertSame($record->first_name, $actual->firstName());
         $this->assertSame($record->last_name, $actual->lastName());
-        $this->assertSame($record->phone_area_code, $actual->phone()->areaCode());
-        $this->assertSame($record->phone_local_code, $actual->phone()->localCode());
-        $this->assertSame($record->phone_subscriber_number, $actual->phone()->subscriberNumber());
-        $this->assertSame($record->postal_code_first, $actual->address()->postalCode()->first());
-        $this->assertSame($record->postal_code_second, $actual->address()->postalCode()->second());
-        $this->assertSame($record->prefecture, $actual->address()->prefecture()->value);
-        $this->assertSame($record->city, $actual->address()->city());
-        $this->assertSame($record->street, $actual->address()->street());
-        $this->assertSame($record->building, $actual->address()->building());
+        $this->assertSame($record->phone_number, $this->deflatePhoneNumber($actual->phone()));
+        $this->assertSame($record->address, $this->deflateAddress($actual->address()));
 
         $expectedCemeteries = json_decode($record->cemeteries, true);
         $this->assertSame(count($expectedCemeteries), $actual->cemeteries()->count());
         Collection::make($expectedCemeteries)
-          ->zip($actual->cemeteries())
-          ->eachSpread(function ($expected, $actual): void {
-              $this->assertInstanceOf(CemeteryIdentifier::class, $actual);
-              $this->assertSame($expected, $actual->value());
-          });
+            ->zip($actual->cemeteries())
+            ->eachSpread(function ($expected, $actual): void {
+                $this->assertInstanceOf(CemeteryIdentifier::class, $actual);
+                $this->assertSame($expected, $actual->value());
+            })
+        ;
 
         $expectedHistories = json_decode($record->transaction_histories, true);
         $this->assertSame(count($expectedHistories), $actual->transactionHistories()->count());
         Collection::make($expectedHistories)
-          ->zip($actual->transactionHistories())
-          ->eachSpread(function ($expected, $actual): void {
-              $this->assertInstanceOf(TransactionHistoryIdentifier::class, $actual);
-              $this->assertSame($expected, $actual->value());
-          });
+            ->zip($actual->transactionHistories())
+            ->eachSpread(function ($expected, $actual): void {
+                $this->assertInstanceOf(TransactionHistoryIdentifier::class, $actual);
+                $this->assertSame($expected, $actual->value());
+            })
+        ;
     }
 
     /**
@@ -329,26 +338,32 @@ class EloquentCustomerRepositoryTest extends TestCase
     private function createListExpected(Criteria $criteria): Enumerable
     {
         return $this->records
-          ->when(
-              !\is_null($criteria->name()),
-              function (Enumerable $records) use ($criteria): Enumerable {
-                  $name = $criteria->name();
+            ->when(
+                !\is_null($criteria->name()),
+                function (Enumerable $records) use ($criteria): Enumerable {
+                    $name = $criteria->name();
 
-                  return $records->filter(fn (Record $record): bool => \str_contains($record->first_name, $name) || \str_contains($record->last_name, $name));
-              }
-          )
-          ->when(
-              !\is_null($criteria->phone()),
-              fn (Enumerable $records): Enumerable => $records
-              ->where('phone_area_code', $criteria->phone()->areaCode())
-              ->where('phone_local_code', $criteria->phone()->localCode())
-              ->where('phone_subscriber_number', $criteria->phone()->subscriberNumber())
-          )
-          ->when(
-              !\is_null($criteria->postalCode()),
-              fn (Enumerable $records) => $records
-              ->where('postal_code_first', $criteria->postalCode()->first())
-              ->where('postal_code_second', $criteria->postalCode()->second())
-          );
+                    return $records->filter(fn (Record $record): bool => \str_contains($record->first_name, $name) || \str_contains($record->last_name, $name));
+                }
+            )
+            ->when(
+                !\is_null($criteria->phone()),
+                fn (Enumerable $records): Enumerable => $records
+                    ->where('phone_number', $this->deflatePhoneNumber($criteria->phone()))
+            )
+            ->when(
+                !\is_null($criteria->postalCode()),
+                fn (Enumerable $records) => $records
+                    ->filter(function (Record $record) use ($criteria): bool {
+                        $address = json_decode($record->address, true);
+                        $postalCode = $criteria->postalCode();
+
+                        if ($postalCode->first() !== $address['postalCode']['first']) {
+                            return false;
+                        }
+
+                        return $postalCode->second() === $address['postalCode']['second'];
+                    })
+            );
     }
 }

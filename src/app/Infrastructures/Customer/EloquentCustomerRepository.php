@@ -10,6 +10,7 @@ use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\TransactionHistory\ValueObjects\TransactionHistoryIdentifier;
 use App\Infrastructures\Common\AbstractEloquentRepository;
 use App\Infrastructures\Customer\Models\Customer as Record;
+use App\Infrastructures\Support\Common\EloquentCommonDomainDeflator;
 use App\Infrastructures\Support\Common\EloquentCommonDomainRestorer;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -20,6 +21,7 @@ use Illuminate\Support\Enumerable;
  */
 class EloquentCustomerRepository extends AbstractEloquentRepository implements CustomerRepository
 {
+    use EloquentCommonDomainDeflator;
     use EloquentCommonDomainRestorer;
 
     /**
@@ -34,24 +36,14 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
      */
     public function add(Entity $customer): void
     {
-        $phone = $customer->phone();
-        $address = $customer->address();
-
         try {
             $this->createQuery()
                 ->create([
                     'identifier' => $customer->identifier()->value(),
                     'first_name' => $customer->firstName(),
                     'last_name' => $customer->lastName(),
-                    'phone_area_code' => $phone->areaCode(),
-                    'phone_local_code' => $phone->localCode(),
-                    'phone_subscriber_number' => $phone->subscriberNumber(),
-                    'postal_code_first' => $address->postalCode()->first(),
-                    'postal_code_second' => $address->postalCode()->second(),
-                    'prefecture' => $address->prefecture->value,
-                    'city' => $address->city(),
-                    'street' => $address->street(),
-                    'building' => $address->building(),
+                    'phone_number' => $this->deflatePhoneNumber($customer->phone()),
+                    'address' => $this->deflateAddress($customer->address()),
                     'cemeteries' => $this->serializeIdentifiers($customer->cemeteries()),
                     'transaction_histories' => $this->serializeIdentifiers($customer->transactionHistories()),
                 ])
@@ -75,21 +67,11 @@ class EloquentCustomerRepository extends AbstractEloquentRepository implements C
             throw new \OutOfBoundsException(\sprintf('Customer not found: %s', $customer->identifier()->value()));
         }
 
-        $phone = $customer->phone();
-        $address = $customer->address();
-
         try {
             $target->first_name = $customer->firstName();
             $target->last_name = $customer->lastName();
-            $target->phone_area_code = $phone->areaCode();
-            $target->phone_local_code = $phone->localCode();
-            $target->phone_subscriber_number = $phone->subscriberNumber();
-            $target->postal_code_first = $address->postalCode()->first();
-            $target->postal_code_second = $address->postalCode()->second();
-            $target->prefecture = $address->prefecture->value;
-            $target->city = $address->city();
-            $target->street = $address->street();
-            $target->building = $address->building();
+            $target->phone_number = $this->deflatePhoneNumber($customer->phone());
+            $target->address = $this->deflateAddress($customer->address());
             $target->cemeteries = $this->serializeIdentifiers($customer->cemeteries());
             $target->transaction_histories = $this->serializeIdentifiers($customer->transactionHistories());
 

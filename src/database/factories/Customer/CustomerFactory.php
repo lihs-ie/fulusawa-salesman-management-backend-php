@@ -17,19 +17,29 @@ class CustomerFactory extends Factory
      */
     public function definition(): array
     {
-        return [
-            'identifier' => Uuid::uuid7()->toString(),
-            'first_name' => fake()->firstName(),
-            'last_name' => fake()->lastName(),
-            'phone_area_code' => (string) '0' . \mt_rand(1, 999),
-            'phone_local_code' => (string) \mt_rand(1, 9999),
-            'phone_subscriber_number' => (string) \mt_rand(100, 99999),
-            'postal_code_first' => (string) \mt_rand(100, 999),
-            'postal_code_second' => (string) \mt_rand(1000, 9999),
+        $phone = \json_encode([
+            'areaCode' => (string) '0'.\mt_rand(1, 999),
+            'localCode' => (string) \mt_rand(1, 9999),
+            'subscriberNumber' => (string) \mt_rand(100, 99999),
+        ]);
+
+        $address = \json_encode([
+            'postalCode' => [
+                'first' => (string) \mt_rand(100, 999),
+                'second' => (string) \mt_rand(1000, 9999),
+            ],
             'prefecture' => \mt_rand(1, 47),
             'city' => fake()->city(),
             'street' => fake()->streetAddress(),
             'building' => fake()->optional()->secondaryAddress(),
+        ]);
+
+        return [
+            'identifier' => Uuid::uuid7()->toString(),
+            'first_name' => fake()->firstName(),
+            'last_name' => fake()->lastName(),
+            'phone_number' => $phone,
+            'address' => $address,
             'cemeteries' => json_encode([]),
             'transaction_histories' => json_encode([]),
         ];
