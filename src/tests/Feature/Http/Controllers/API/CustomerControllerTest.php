@@ -7,7 +7,7 @@ use App\Domains\Customer\ValueObjects\CustomerIdentifier;
 use App\Domains\User\ValueObjects\Role;
 use App\Http\Encoders\Customer\CustomerEncoder;
 use App\Infrastructures\Customer\Models\Customer as Record;
-use Closure;
+use App\Infrastructures\Support\Common\EloquentCommonDomainDeflator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Enumerable;
 use Illuminate\Testing\TestResponse;
@@ -27,10 +27,13 @@ use Tests\TestCase;
  * @coversNothing
  *
  * @SuppressWarnings(PHPMD.TooManyMethods)
+ *
+ * @internal
  */
 class CustomerControllerTest extends TestCase
 {
     use DependencyBuildable;
+    use EloquentCommonDomainDeflator;
     use FactoryResolvable;
     use RefreshDatabase;
     use WithAuthenticationCallable;
@@ -38,7 +41,7 @@ class CustomerControllerTest extends TestCase
     /**
      * テストに使用するレコード.
      */
-    private Enumerable|null $records;
+    private ?Enumerable $records;
 
     /**
      * テストに使用する顧客エンコーダ.
@@ -234,9 +237,10 @@ class CustomerControllerTest extends TestCase
 
     /**
      * @testdox testListSuccessReturnsSuccessfulResponse 顧客一覧取得APIを正常なリクエストで実行したとき正常なレスポンスが返却されること.
+     *
      * @dataProvider provideConditions
      */
-    public function testListSuccessReturnsSuccessfulResponse(Closure $closure): void
+    public function testListSuccessReturnsSuccessfulResponse(\Closure $closure): void
     {
         $record = $this->records->random();
 
@@ -350,13 +354,14 @@ class CustomerControllerTest extends TestCase
     private function createRecords(): Enumerable
     {
         return $this->factory(Record::class)
-            ->createMany(\mt_rand(5, 10));
+            ->createMany(\mt_rand(5, 10))
+        ;
     }
 
     /**
      * 顧客追加APIを実行する.
      */
-    private function hitAddAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitAddAPI(array $payload, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'POST',
@@ -369,7 +374,7 @@ class CustomerControllerTest extends TestCase
     /**
      * 顧客更新APIを実行する.
      */
-    private function hitUpdateAPI(array $payload, string|null $accessToken = null): TestResponse
+    private function hitUpdateAPI(array $payload, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'PUT',
@@ -382,7 +387,7 @@ class CustomerControllerTest extends TestCase
     /**
      * 顧客取得APIを実行する.
      */
-    private function hitFindAPI(string $identifier, string|null $accessToken = null): TestResponse
+    private function hitFindAPI(string $identifier, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
@@ -394,7 +399,7 @@ class CustomerControllerTest extends TestCase
     /**
      * 顧客一覧取得APIを実行する.
      */
-    private function hitListAPI(array $conditions = [], string|null $accessToken = null): TestResponse
+    private function hitListAPI(array $conditions = [], ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'GET',
@@ -406,7 +411,7 @@ class CustomerControllerTest extends TestCase
     /**
      * 顧客削除APIを実行する.
      */
-    private function hitDeleteAPI(string $identifier, string|null $accessToken = null): TestResponse
+    private function hitDeleteAPI(string $identifier, ?string $accessToken = null): TestResponse
     {
         return $this->json(
             method: 'DELETE',
@@ -424,15 +429,8 @@ class CustomerControllerTest extends TestCase
             'identifier' => $expected['identifier'],
             'last_name' => $expected['name']['last'],
             'first_name' => $expected['name']['first'],
-            'phone_area_code' => $expected['phone']['areaCode'],
-            'phone_local_code' => $expected['phone']['localCode'],
-            'phone_subscriber_number' => $expected['phone']['subscriberNumber'],
-            'postal_code_first' => $expected['address']['postalCode']['first'],
-            'postal_code_second' => $expected['address']['postalCode']['second'],
-            'prefecture' => $expected['address']['prefecture'],
-            'city' => $expected['address']['city'],
-            'street' => $expected['address']['street'],
-            'building' => $expected['address']['building'],
+            'phone_number' => \json_encode($expected['phone']),
+            'address' => \json_encode($expected['address']),
             'cemeteries' => \json_encode($expected['cemeteries']),
             'transaction_histories' => \json_encode($expected['transactionHistories']),
         ]);
@@ -449,21 +447,8 @@ class CustomerControllerTest extends TestCase
                 'last' => $record->last_name,
                 'first' => $record->first_name,
             ],
-            'phone' => [
-                'areaCode' => $record->phone_area_code,
-                'localCode' => $record->phone_local_code,
-                'subscriberNumber' => $record->phone_subscriber_number,
-            ],
-            'address' => [
-                'postalCode' => [
-                    'first' => $record->postal_code_first,
-                    'second' => $record->postal_code_second,
-                ],
-                'prefecture' => $record->prefecture,
-                'city' => $record->city,
-                'street' => $record->street,
-                'building' => $record->building,
-            ],
+            'phone' => \json_decode($record->phone_number, true),
+            'address' => \json_decode($record->address, true),
             'cemeteries' => \json_decode($record->cemeteries, true),
             'transactionHistories' => \json_decode($record->transaction_histories, true),
         ];
@@ -487,19 +472,24 @@ class CustomerControllerTest extends TestCase
                 ->when(
                     isset($conditions['phone']),
                     fn (Enumerable $records): Enumerable => $records
-                        ->where('phone_area_code', $conditions['phone']['areaCode'])
-                        ->where('phone_local_code', $conditions['phone']['localCode'])
-                        ->where('phone_subscriber_number', $conditions['phone']['subscriberNumber'])
+                        ->where('phone_number', \json_encode($conditions['phone']))
                 )
                 ->when(
                     isset($conditions['postalCode']),
                     fn (Enumerable $records) => $records
-                        ->where('postal_code_first', $conditions['postalCode']['first'])
-                        ->where('postal_code_second', $conditions['postalCode']['second'])
+                        ->filter(function (Record $record) use ($conditions): bool {
+                            $address = json_decode($record->address, true);
+
+                            if ($conditions['postalCode']['first'] !== $address['postalCode']['first']) {
+                                return false;
+                            }
+
+                            return $conditions['postalCode']['second'] === $address['postalCode']['second'];
+                        })
                 )
                 ->map(fn (Record $record): array => $this->createExpectedFromRecord($record))
                 ->values()
-                ->all()
+                ->all(),
         ];
     }
 }

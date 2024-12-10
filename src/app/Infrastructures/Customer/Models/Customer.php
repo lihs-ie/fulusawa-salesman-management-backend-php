@@ -12,16 +12,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * customersテーブル
+ * customersテーブル.
  */
 class Customer extends Model
 {
     use HasFactory;
     use HasUuids;
 
-    protected $primaryKey = 'identifier';
-
     public $incrementing = false;
+
+    protected $primaryKey = 'identifier';
 
     protected $keyType = 'string';
 
@@ -34,21 +34,14 @@ class Customer extends Model
         'identifier',
         'first_name',
         'last_name',
-        'phone_area_code',
-        'phone_local_code',
-        'phone_subscriber_number',
-        'postal_code_first',
-        'postal_code_second',
-        'prefecture',
-        'city',
-        'street',
-        'building',
+        'phone_number',
+        'address',
         'cemeteries',
         'transaction_histories',
     ];
 
     /**
-     * リレーション: cemeteriesテーブル
+     * リレーション: cemeteriesテーブル.
      */
     public function cemeteries(): HasMany
     {
@@ -56,7 +49,7 @@ class Customer extends Model
     }
 
     /**
-     * 顧客識別子に一致するレコードを取得する
+     * 顧客識別子に一致するレコードを取得する.
      */
     public function scopeOfIdentifier(Builder $query, CustomerIdentifier $identifier): void
     {
@@ -64,27 +57,32 @@ class Customer extends Model
     }
 
     /**
-     * 検索条件に一致するレコードを取得する
+     * 検索条件に一致するレコードを取得する.
      */
     public function scopeOfCriteria(Builder $query, Criteria $criteria): void
     {
         if (!\is_null($criteria->name())) {
             $query
                 ->orWhere('first_name', 'like', "%{$criteria->name()}%")
-                ->orWhere('last_name', 'like', "%{$criteria->name()}%");
+                ->orWhere('last_name', 'like', "%{$criteria->name()}%")
+            ;
         }
 
         if (!\is_null($criteria->phone())) {
             $query
-                ->where('phone_area_code', $criteria->phone()->areaCode())
-                ->where('phone_local_code', $criteria->phone()->localCode())
-                ->where('phone_subscriber_number', $criteria->phone()->subscriberNumber());
+                ->where('phone_number->areaCode', $criteria->phone()->areaCode())
+                ->where('phone_number->localCode', $criteria->phone()->localCode())
+                ->where('phone_number->subscriberNumber', $criteria->phone()->subscriberNumber())
+            ;
         }
 
         if (!\is_null($criteria->postalCode())) {
+            $postalCode = $criteria->postalCode();
+
             $query
-                ->where('postal_code_first', $criteria->postalCode()->first())
-                ->where('postal_code_second', $criteria->postalCode()->second());
+                ->where('address->postalCode->first', $postalCode->first())
+                ->where('address->postalCode->second', $postalCode->second())
+            ;
         }
     }
 }
