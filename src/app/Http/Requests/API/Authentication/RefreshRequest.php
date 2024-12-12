@@ -5,7 +5,7 @@ namespace App\Http\Requests\API\Authentication;
 use App\Domains\Authentication\ValueObjects\TokenType;
 
 /**
- * リフレッシュリクエスト
+ * リフレッシュリクエスト.
  */
 class RefreshRequest extends TokenRequest
 {
@@ -15,8 +15,8 @@ class RefreshRequest extends TokenRequest
     public function rules(): array
     {
         return [
-          ...parent::rules(),
-          'token.type' => ['required', 'string', \sprintf('in:%s', TokenType::REFRESH->name)]
+            ...parent::rules(),
+            'type' => ['required', 'string', \sprintf('in:%s', TokenType::REFRESH->name)],
         ];
     }
 }

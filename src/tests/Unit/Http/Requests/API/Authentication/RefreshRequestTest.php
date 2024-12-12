@@ -16,6 +16,8 @@ use Tests\Unit\Http\Requests\API\CommandRequestTest;
  * @group authentication
  *
  * @coversNothing
+ *
+ * @internal
  */
 class RefreshRequestTest extends TestCase
 {
@@ -51,9 +53,8 @@ class RefreshRequestTest extends TestCase
     protected function createDefaultPayload(): array
     {
         return [
-          'type' => TokenType::REFRESH->name,
-          'value' => Hash::make('password'),
-          'expiresAt' => now()->addDay()->toDateTimeString(),
+            'type' => TokenType::REFRESH->name,
+            'value' => Hash::make('password'),
         ];
     }
 
@@ -63,7 +64,7 @@ class RefreshRequestTest extends TestCase
     protected function getValidPayloadPatterns(): array
     {
         return [
-          'default' => []
+            'default' => [],
         ];
     }
 
@@ -73,21 +74,16 @@ class RefreshRequestTest extends TestCase
     protected function getInvalidPayloadPatterns(): array
     {
         return [
-          'type' => [
-            'invalid type' => TokenType::ACCESS->name,
-            'integer' => 123,
-            'empty' => '',
-            'invalid format' => 'invalid',
-          ],
-          'value' => [
-            'invalid type' => 123,
-            'empty' => '',
-          ],
-          'expiresAt' => [
-            'invalid type' => 123,
-            'empty' => '',
-            'invalid format' => 'invalid',
-          ],
+            'type' => [
+                'invalid type' => TokenType::ACCESS->name,
+                'integer' => 123,
+                'empty' => '',
+                'invalid format' => 'invalid',
+            ],
+            'value' => [
+                'invalid type' => 123,
+                'empty' => '',
+            ],
         ];
     }
 

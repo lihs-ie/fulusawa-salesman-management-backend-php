@@ -2,6 +2,7 @@
 
 namespace App\Domains\User;
 
+use App\Domains\Common\ValueObjects\MailAddress;
 use App\Domains\User\Entities\User;
 use App\Domains\User\ValueObjects\UserIdentifier;
 use Illuminate\Support\Enumerable;
@@ -32,6 +33,13 @@ interface UserRepository
      * @throws \OutOfBoundsException ユーザーが存在しない場合
      */
     public function find(UserIdentifier $identifier): User;
+
+    /**
+     * クレデンシャルに紐づくユーザーが存在するか確認する.
+     *
+     * @throws \OutOfBoundsException ユーザーが存在しない場合
+     */
+    public function ofCredentials(MailAddress $email, string $password): User;
 
     /**
      * ユーザー一覧を取得する.

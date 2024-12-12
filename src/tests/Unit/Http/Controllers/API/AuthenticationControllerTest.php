@@ -3,7 +3,6 @@
 namespace Tests\Unit\Http\Controllers\API;
 
 use App\Domains\Authentication\Entities\Authentication as Entity;
-use App\Domains\Authentication\ValueObjects\Token;
 use App\Domains\Authentication\ValueObjects\TokenType;
 use App\Exceptions\InvalidTokenException;
 use App\Http\Controllers\API\AuthenticationController;
@@ -13,9 +12,13 @@ use App\Http\Requests\API\Authentication\LogoutRequest;
 use App\Http\Requests\API\Authentication\RefreshRequest;
 use App\Http\Requests\API\Authentication\TokenRequest;
 use App\UseCases\Authentication as UseCase;
+use Faker\Factory;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Support\Collection;
+use Illuminate\Http\Response;
+use Illuminate\Support\Enumerable;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
@@ -31,11 +34,18 @@ use Tests\TestCase;
  * @group authentication
  *
  * @coversNothing
+ *
+ * @internal
  */
 class AuthenticationControllerTest extends TestCase
 {
     use DependencyBuildable;
     use RequestGeneratable;
+
+    /**
+     * テストに使用するインスタンス.
+     */
+    private ?Enumerable $instances;
 
     /**
      * 認証エンコーダインスタンス。
@@ -49,7 +59,18 @@ class AuthenticationControllerTest extends TestCase
     {
         parent::setUp();
 
+        $this->instances = $this->createInstances();
         $this->encoder = $this->builder()->create(AuthenticationEncoder::class);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    protected function tearDown(): void
+    {
+        $this->instances = null;
+
+        parent::tearDown();
     }
 
     /**
@@ -69,14 +90,21 @@ class AuthenticationControllerTest extends TestCase
     {
         $controller = new AuthenticationController();
 
-        $useCase = $this->createUseCase();
-
+        $entity = $this->builder()->create(Entity::class);
 
         $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'email' => 'test@test.com',
-          'password' => 'password',
+            'identifier' => $entity->identifier->value(),
+            'email' => Factory::create()->email,
+            'password' => Str::random(\mt_rand(8, 16)),
         ];
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('persist')
+            ->with(...$payload)
+            ->willReturn($entity)
+        ;
 
         $request = $this->createJsonRequest(LoginRequest::class, $payload);
 
@@ -99,17 +127,19 @@ class AuthenticationControllerTest extends TestCase
     {
         $controller = new AuthenticationController();
 
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'email' => 'test@test.com',
+            'password' => 'password',
+        ];
+
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->willThrowException(new AuthorizationException());
-
-        $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'email' => 'test@test.com',
-          'password' => 'password',
-        ];
+            ->expects($this->once())
+            ->method('persist')
+            ->with(...$payload)
+            ->willThrowException(new AuthorizationException())
+        ;
 
         $request = $this->createJsonRequest(LoginRequest::class, $payload);
 
@@ -125,17 +155,19 @@ class AuthenticationControllerTest extends TestCase
     {
         $controller = new AuthenticationController();
 
+        $payload = [
+            'identifier' => Uuid::uuid7()->toString(),
+            'email' => 'test@test.com',
+            'password' => 'password',
+        ];
+
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('persist')
-          ->willThrowException($this->createMock(UniqueConstraintViolationException::class));
-
-        $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'email' => 'test@test.com',
-          'password' => 'password',
-        ];
+            ->expects($this->once())
+            ->method('persist')
+            ->with(...$payload)
+            ->willThrowException($this->createMock(UniqueConstraintViolationException::class))
+        ;
 
         $request = $this->createJsonRequest(LoginRequest::class, $payload);
 
@@ -153,17 +185,22 @@ class AuthenticationControllerTest extends TestCase
 
         $controller = new AuthenticationController();
 
-        $useCase = $this->createUseCase(['instances' => new Collection([$instance])]);
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('logout')
+            ->with($instance->identifier->value())
+        ;
 
         $payload = [
-          'identifier' => $instance->identifier->value(),
+            'identifier' => $instance->identifier->value(),
         ];
 
         $request = $this->createJsonRequest(LogoutRequest::class, $payload);
 
         $actual = $controller->logout($request, $useCase);
 
-        $this->assertSame([], $actual);
+        $this->assertInstanceOf(Response::class, $actual);
     }
 
     /**
@@ -175,12 +212,13 @@ class AuthenticationControllerTest extends TestCase
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('logout')
-          ->willThrowException(new \OutOfBoundsException());
+            ->expects($this->once())
+            ->method('logout')
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
+            'identifier' => Uuid::uuid7()->toString(),
         ];
 
         $request = $this->createJsonRequest(LogoutRequest::class, $payload);
@@ -192,73 +230,35 @@ class AuthenticationControllerTest extends TestCase
 
     /**
      * @testdox testIntrospectReturnsSuccessfulResponse introspectionメソッドで正常な値を与えたとき有効なトークンであること.
-     *
-     * @dataProvider provideIntrospectValues
      */
-    public function testIntrospectReturnsSuccessfulResponse(array $overrides, bool $expected): void
+    public function testIntrospectReturnsSuccessfulResponse(): void
     {
-        $instance = $this->builder()->create(Entity::class, null, [
-          'accessToken' => $this->builder()->create(Token::class, null, $overrides['accessToken']),
-          'refreshToken' => $this->builder()->create(Token::class, null, $overrides['refreshToken']),
-        ]);
+        $instance = $this->builder()->create(Entity::class);
+
+        $payload = [
+            'value' => $instance->accessToken()->value(),
+            'type' => $instance->accessToken()->type()->name,
+        ];
+
+        $expected = [
+            'active' => (bool) \mt_rand(0, 1),
+        ];
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('introspection')
+            ->with(...$payload)
+            ->willReturn($expected['active'])
+        ;
+
+        $request = $this->createJsonRequest(TokenRequest::class, $payload);
 
         $controller = new AuthenticationController();
 
-        $useCase = $this->createUseCase(['instances' => new Collection([$instance])]);
+        $actual = $controller->introspect($request, $useCase);
 
-        $createPayload = fn (Token $token) => [
-          'token' => [
-            'type' => $token->type()->name,
-            'value' => $token->value(),
-            'expiresAt' => $token->expiresAt()->toAtomString(),
-          ]
-        ];
-
-        $payload1 = $createPayload($instance->accessToken());
-        $payload2 = $createPayload($instance->refreshToken());
-
-        $request1 = $this->createJsonRequest(TokenRequest::class, $payload1);
-        $request2 = $this->createJsonRequest(TokenRequest::class, $payload2);
-
-        $actual1 = $controller->introspect($request1, $useCase);
-        $actual2 = $controller->introspect($request2, $useCase);
-
-        $this->assertSame($expected, $actual1['active']);
-        $this->assertSame($expected, $actual2['active']);
-    }
-
-    /**
-     * introspectメソッドのテストデータと期待結果を提供するプロバイダ.
-     */
-    public static function provideIntrospectValues(): \Generator
-    {
-        yield 'active token' => [
-          'overrides' => [
-            'accessToken' =>  [
-              'type' => TokenType::ACCESS,
-              'expiresAt' => now()->addDay(),
-            ],
-            'refreshToken' => [
-              'type' => TokenType::REFRESH,
-              'expiresAt' => now()->addDay(),
-            ],
-          ],
-          'expected' => true,
-        ];
-
-        yield 'inactive token' => [
-          'overrides' => [
-            'accessToken' =>  [
-              'type' => TokenType::ACCESS,
-              'expiresAt' => now()->subDay(),
-            ],
-            'refreshToken' => [
-              'type' => TokenType::REFRESH,
-              'expiresAt' => now()->subDay(),
-            ],
-          ],
-          'expected' => false,
-        ];
+        $this->assertSame($expected, $actual);
     }
 
     /**
@@ -266,23 +266,24 @@ class AuthenticationControllerTest extends TestCase
      */
     public function testIntrospectThrowsNotFoundWhenInvalidTokenWasThrown(): void
     {
-        $controller = new AuthenticationController();
+        $instance = $this->builder()->create(Entity::class);
+
+        $payload = [
+            'value' => $instance->accessToken()->value(),
+            'type' => $instance->accessToken()->type()->name,
+        ];
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('introspection')
-          ->willThrowException(new InvalidTokenException());
-
-        $payload = [
-          'token' => [
-            'type' => TokenType::ACCESS->name,
-            'value' => Uuid::uuid7()->toString(),
-            'expiresAt' => now()->toAtomString(),
-          ]
-        ];
+            ->expects($this->once())
+            ->method('introspection')
+            ->with(...$payload)
+            ->willThrowException(new InvalidTokenException())
+        ;
 
         $request = $this->createJsonRequest(TokenRequest::class, $payload);
+
+        $controller = new AuthenticationController();
 
         $this->expectException(BadRequestHttpException::class);
 
@@ -296,31 +297,32 @@ class AuthenticationControllerTest extends TestCase
     {
         $instance = $this->builder()->create(Entity::class);
 
-        $controller = new AuthenticationController();
+        $next = $this->builder()->create(class: Entity::class, overrides: [
+            'identifier' => $instance->identifier,
+        ]);
 
-        $useCase = $this->createUseCase(['instances' => new Collection([$instance])]);
+        $expected = $this->encoder->encode($next);
 
         $payload = [
-          'token' => [
+            'value' => Hash::make($instance->refreshToken()->value()),
             'type' => TokenType::REFRESH->name,
-            'value' => $instance->refreshToken()->value(),
-            'expiresAt' => $instance->refreshToken()->expiresAt()->toAtomString(),
-          ]
         ];
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('refresh')
+            ->with(...$payload)
+            ->willReturn($next)
+        ;
 
         $request = $this->createJsonRequest(RefreshRequest::class, $payload);
 
+        $controller = new AuthenticationController();
+
         $actual = $controller->refresh($request, $useCase, $this->encoder);
 
-        $this->assertIsArray($actual);
-        $this->assertArrayHasKey('accessToken', $actual);
-        $this->assertArrayHasKey('refreshToken', $actual);
-
-        $this->assertSame(TokenType::ACCESS->name, $actual['accessToken']['type']);
-        $this->assertSame(TokenType::REFRESH->name, $actual['refreshToken']['type']);
-
-        $this->assertNotSame($instance->accessToken()->value(), $actual['accessToken']['value']);
-        $this->assertNotSame($instance->refreshToken()->value(), $actual['refreshToken']['value']);
+        $this->assertSame($expected, $actual);
     }
 
     /**
@@ -328,25 +330,24 @@ class AuthenticationControllerTest extends TestCase
      */
     public function testRefreshThrowsBadRequestWhenInvalidTokenWasThrown(): void
     {
-        $controller = new AuthenticationController();
+        $payload = [
+            'value' => Uuid::uuid7()->toString(),
+            'type' => TokenType::REFRESH->name,
+        ];
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('refresh')
-          ->willThrowException(new InvalidTokenException());
-
-        $payload = [
-          'token' => [
-            'type' => TokenType::REFRESH->name,
-            'value' => Uuid::uuid7()->toString(),
-            'expiresAt' => now()->toAtomString(),
-          ]
-        ];
+            ->expects($this->once())
+            ->method('refresh')
+            ->with(...$payload)
+            ->willThrowException(new InvalidTokenException())
+        ;
 
         $request = $this->createJsonRequest(RefreshRequest::class, $payload);
 
         $this->expectException(BadRequestHttpException::class);
+
+        $controller = new AuthenticationController();
 
         $controller->refresh($request, $useCase, $this->encoder);
     }
@@ -358,23 +359,26 @@ class AuthenticationControllerTest extends TestCase
     {
         $instance = $this->builder()->create(Entity::class);
 
-        $controller = new AuthenticationController();
-
-        $useCase = $this->createUseCase(['instances' => new Collection([$instance])]);
-
         $payload = [
-          'token' => [
-            'type' => TokenType::ACCESS->name,
             'value' => $instance->accessToken()->value(),
-            'expiresAt' => $instance->accessToken()->expiresAt()->toAtomString(),
-          ]
+            'type' => TokenType::ACCESS->name,
         ];
+
+        $useCase = $this->createMock(UseCase::class);
+        $useCase
+            ->expects($this->once())
+            ->method('revoke')
+            ->with(...$payload)
+        ;
 
         $request = $this->createJsonRequest(TokenRequest::class, $payload);
 
+        $controller = new AuthenticationController();
+
         $actual = $controller->revoke($request, $useCase);
 
-        $this->assertSame([], $actual);
+        $this->assertInstanceOf(Response::class, $actual);
+        $this->assertSame(Response::HTTP_NO_CONTENT, $actual->getStatusCode());
     }
 
     /**
@@ -382,23 +386,22 @@ class AuthenticationControllerTest extends TestCase
      */
     public function testRevokeThrowsBadRequestWhenInvalidTokenWasThrown(): void
     {
-        $controller = new AuthenticationController();
+        $payload = [
+            'value' => Uuid::uuid7()->toString(),
+            'type' => TokenType::ACCESS->name,
+        ];
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
-          ->expects($this->once())
-          ->method('revoke')
-          ->willThrowException(new InvalidTokenException());
-
-        $payload = [
-          'token' => [
-            'type' => TokenType::ACCESS->name,
-            'value' => Uuid::uuid7()->toString(),
-            'expiresAt' => now()->toAtomString(),
-          ]
-        ];
+            ->expects($this->once())
+            ->method('revoke')
+            ->with(...$payload)
+            ->willThrowException(new InvalidTokenException())
+        ;
 
         $request = $this->createJsonRequest(TokenRequest::class, $payload);
+
+        $controller = new AuthenticationController();
 
         $this->expectException(BadRequestHttpException::class);
 
@@ -406,10 +409,10 @@ class AuthenticationControllerTest extends TestCase
     }
 
     /**
-     * ユースケースを生成するへルパ.
+     * テストに使用するインスタンスを生成する.
      */
-    private function createUseCase(array $overrides = []): UseCase
+    private function createInstances(): Enumerable
     {
-        return $this->builder()->create(UseCase::class, null, $overrides);
+        return $this->builder()->createList(Entity::class, \mt_rand(5, 10));
     }
 }

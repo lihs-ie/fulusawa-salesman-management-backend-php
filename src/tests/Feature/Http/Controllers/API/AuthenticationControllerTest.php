@@ -6,9 +6,11 @@ use App\Infrastructures\Authentication\Models\Authentication as Record;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Enumerable;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Testing\TestResponse;
 use Ramsey\Uuid\Uuid;
 use Tests\Support\DependencyBuildable;
+use Tests\Support\Helpers\Http\WithAuthenticationCallable;
 use Tests\Support\Helpers\Infrastructures\Database\FactoryResolvable;
 use Tests\TestCase;
 
@@ -19,17 +21,20 @@ use Tests\TestCase;
  * @group authentication
  *
  * @coversNothing
+ *
+ * @internal
  */
 class AuthenticationControllerTest extends TestCase
 {
     use DependencyBuildable;
     use FactoryResolvable;
     use RefreshDatabase;
+    use WithAuthenticationCallable;
 
     /**
      * テストに使用するレコード.
      */
-    private Enumerable|null $records;
+    private ?Enumerable $records;
 
     /**
      * {@inheritdoc}
@@ -57,13 +62,14 @@ class AuthenticationControllerTest extends TestCase
     public function testLoginReturnsSuccessfulResponse(): void
     {
         $record = $this->pickRecord()
-          ->with('user')
-          ->first();
+            ->with('user')
+            ->first()
+        ;
 
         $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'email' => $record->user->email,
-          'password' => $record->user->password,
+            'identifier' => Uuid::uuid7()->toString(),
+            'email' => $record->user->email,
+            'password' => $record->user->password,
         ];
 
         $response = $this->hitLoginAPI($payload);
@@ -77,14 +83,14 @@ class AuthenticationControllerTest extends TestCase
     public function testLoginReturnsAccessDeniedResponseWithInvalidCredentials(): void
     {
         $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'email' => 'test@test.com',
-          'password' => 'invalid-password',
+            'identifier' => Uuid::uuid7()->toString(),
+            'email' => 'test@test.com',
+            'password' => 'invalid-password',
         ];
 
         $response = $this->hitLoginAPI($payload);
 
-        $response->assertForbidden();
+        $response->assertNotFound();
     }
 
     /**
@@ -93,13 +99,14 @@ class AuthenticationControllerTest extends TestCase
     public function testLoginReturnsBadRequestResponseWithDuplicateIdentifier(): void
     {
         $record = $this->pickRecord()
-          ->with('user')
-          ->first();
+            ->with('user')
+            ->first()
+        ;
 
         $payload = [
-          'identifier' => $record->identifier,
-          'email' => $record->user->email,
-          'password' => $record->user->password,
+            'identifier' => $record->identifier,
+            'email' => $record->user->email,
+            'password' => $record->user->password,
         ];
 
         $response = $this->hitLoginAPI($payload);
@@ -115,16 +122,15 @@ class AuthenticationControllerTest extends TestCase
         $authentication = $this->getAuthentication();
 
         $payload = [
-          'identifier' => $authentication['identifier'],
+            'identifier' => $authentication['identifier'],
         ];
 
-        $header = [
-          'Authorization' => \sprintf('Bearer %s', $authentication['accessToken']['value']),
-        ];
-
-        $response = $this->hitLogoutAPI($payload, $header);
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitLogoutAPI($payload, $accessToken)
+        );
 
         $response->assertSuccessful();
+
         $this->assertDatabaseMissing(
             'authentications',
             ['identifier' => $authentication['identifier']]
@@ -136,17 +142,13 @@ class AuthenticationControllerTest extends TestCase
      */
     public function testLogoutReturnsNotFoundWithMissingIdentifier(): void
     {
-        $authentication = $this->getAuthentication();
-
         $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
+            'identifier' => Uuid::uuid7()->toString(),
         ];
 
-        $header = [
-          'Authorization' => \sprintf('Bearer %s', $authentication['accessToken']['value']),
-        ];
-
-        $response = $this->hitLogoutAPI($payload, $header);
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitLogoutAPI($payload, $accessToken)
+        );
 
         $response->assertNotFound();
     }
@@ -159,18 +161,15 @@ class AuthenticationControllerTest extends TestCase
         $authentication = $this->getAuthentication();
 
         $payload = [
-          'token' => $authentication['accessToken']
+            'type' => 'ACCESS',
+            'value' => $authentication['accessToken']['value'],
         ];
 
-        $header = [
-          'Authorization' => \sprintf('Bearer %s', $authentication['accessToken']['value']),
-        ];
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitIntrospectAPI($payload, $accessToken)
+        );
 
-        $response = $this->hitIntrospectAPI($payload, $header);
-
-        $expected = [
-          'active' => true,
-        ];
+        $expected = ['active' => true];
 
         $response->assertSuccessful();
         $response->assertJson($expected);
@@ -184,18 +183,15 @@ class AuthenticationControllerTest extends TestCase
         $authentication = $this->getAuthentication();
 
         $payload = [
-          'token' => $authentication['refreshToken']
+            'type' => 'REFRESH',
+            'value' => $authentication['refreshToken']['value'],
         ];
 
-        $header = [
-          'Authorization' => \sprintf('Bearer %s', $authentication['accessToken']['value']),
-        ];
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitIntrospectAPI($payload, $accessToken)
+        );
 
-        $response = $this->hitIntrospectAPI($payload, $header);
-
-        $expected = [
-          'active' => true,
-        ];
+        $expected = ['active' => true];
 
         $response->assertSuccessful();
         $response->assertJson($expected);
@@ -207,24 +203,20 @@ class AuthenticationControllerTest extends TestCase
     public function testIntrospectReturnsUnauthorizedWithExpiredToken(): void
     {
         $expired = $this->factory(Record::class)
-          ->bothExpired()
-          ->create();
+            ->bothExpired()
+            ->create()
+        ;
 
         $payload = [
-          'token' => [
             'type' => 'ACCESS',
             'value' => $expired->token,
-            'expiresAt' => $expired->expires_at->toAtomString(),
-          ]
         ];
 
-        $header = [
-          'Authorization' => \sprintf('Bearer %s', $expired->token),
-        ];
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitIntrospectAPI($payload, $accessToken)
+        );
 
-        $response = $this->hitIntrospectAPI($payload, $header);
-
-        $response->assertUnauthorized();
+        $response->assertBadRequest();
     }
 
     /**
@@ -235,14 +227,13 @@ class AuthenticationControllerTest extends TestCase
         $authentication = $this->getAuthentication();
 
         $payload = [
-          'token' => $authentication['refreshToken']
+            'type' => 'REFRESH',
+            'value' => $authentication['refreshToken']['value'],
         ];
 
-        $header = [
-          'Authorization' => \sprintf('Bearer %s', $authentication['accessToken']['value']),
-        ];
-
-        $response = $this->hitRefreshAPI($payload, $header);
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitRefreshAPI($payload, $accessToken)
+        );
 
         $response->assertSuccessful();
 
@@ -261,25 +252,19 @@ class AuthenticationControllerTest extends TestCase
      */
     public function testRefreshReturnsBadRequestWithInvalidToken(): void
     {
-        $authentication = $this->getAuthentication();
-
         $expired = $this->factory(Record::class)
-          ->bothExpired()
-          ->create();
+            ->bothExpired()
+            ->create()
+        ;
 
         $payload = [
-          'token' => [
             'type' => 'REFRESH',
-            'value' => $expired->refresh_token,
-            'expiresAt' => $expired->refresh_token_expires_at,
-          ]
+            'value' => Hash::make($expired->refresh_token),
         ];
 
-        $header = [
-          'Authorization' => \sprintf('Bearer %s', $authentication['accessToken']['value']),
-        ];
-
-        $response = $this->hitRefreshAPI($payload, $header);
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitRefreshAPI($payload, $accessToken)
+        );
 
         $response->assertBadRequest();
     }
@@ -292,27 +277,25 @@ class AuthenticationControllerTest extends TestCase
         $authentication = $this->getAuthentication();
 
         $payload = [
-          'token' => $authentication['accessToken']
+            'type' => 'ACCESS',
+            'value' => $authentication['accessToken']['value'],
         ];
 
-        $header = [
-          'Authorization' => \sprintf('Bearer %s', $authentication['accessToken']['value']),
-        ];
-
-        $response = $this->hitRevokeAPI($payload, $header);
+        $response = $this->callAPIWithAuthentication(
+            fn (string $accessToken): TestResponse => $this->hitRevokeAPI($payload, $accessToken)
+        );
 
         $response->assertSuccessful();
-        $response->assertJson([]);
 
         $this->assertDatabaseHas(
             'authentications',
             [
-            'identifier' => $authentication['identifier'],
-            'token' => null,
-            'expires_at' => null,
-            'refresh_token' => hash('sha256', $authentication['refreshToken']['value']),
-            'refresh_token_expires_at' => $authentication['refreshToken']['expiresAt'],
-      ]
+                'identifier' => $authentication['identifier'],
+                'token' => null,
+                'expires_at' => null,
+                'refresh_token' => hash('sha256', $authentication['refreshToken']['value']),
+                'refresh_token_expires_at' => $authentication['refreshToken']['expiresAt'],
+            ]
         );
     }
 
@@ -327,33 +310,53 @@ class AuthenticationControllerTest extends TestCase
     /**
      * ログアウトAPIを呼び出す.
      */
-    private function hitLogoutAPI(array $payload, array $headers = []): TestResponse
+    private function hitLogoutAPI(array $payload, ?string $accessToken = null): TestResponse
     {
-        return $this->json('POST', '/api/auth/logout', $payload, $headers);
+        return $this->json(
+            'POST',
+            '/api/auth/logout',
+            $payload,
+            ['Authorization' => \sprintf('Bearer %s', $accessToken)]
+        );
     }
 
     /**
      * イントロスペクトAPIを呼び出す.
      */
-    private function hitIntrospectAPI(array $payload, array $headers = []): TestResponse
+    private function hitIntrospectAPI(array $payload, ?string $accessToken = null): TestResponse
     {
-        return $this->json('POST', '/api/auth/introspect', $payload, $headers);
+        return $this->json(
+            'POST',
+            '/api/auth/introspect',
+            $payload,
+            ['Authorization' => \sprintf('Bearer %s', $accessToken)]
+        );
     }
 
     /**
      * リフレッシュAPIを呼び出す.
      */
-    private function hitRefreshAPI(array $payload, array $headers = []): TestResponse
+    private function hitRefreshAPI(array $payload, ?string $accessToken = null): TestResponse
     {
-        return $this->json('POST', '/api/auth/token', $payload, $headers);
+        return $this->json(
+            'POST',
+            '/api/auth/token',
+            $payload,
+            ['Authorization' => \sprintf('Bearer %s', $accessToken)]
+        );
     }
 
     /**
      * リヴォケーションAPIを呼び出す.
      */
-    private function hitRevokeAPI(array $payload, array $headers = []): TestResponse
+    private function hitRevokeAPI(array $payload, ?string $accessToken = null): TestResponse
     {
-        return $this->json('POST', '/api/auth/revoke', $payload, $headers);
+        return $this->json(
+            'POST',
+            '/api/auth/revoke',
+            $payload,
+            ['Authorization' => \sprintf('Bearer %s', $accessToken)]
+        );
     }
 
     /**
@@ -362,13 +365,14 @@ class AuthenticationControllerTest extends TestCase
     private function getAuthentication(): array
     {
         $record = $this->pickRecord()
-          ->with('user')
-          ->first();
+            ->with('user')
+            ->first()
+        ;
 
         $payload = [
-          'identifier' => Uuid::uuid7()->toString(),
-          'email' => $record->user->email,
-          'password' => $record->user->password,
+            'identifier' => Uuid::uuid7()->toString(),
+            'email' => $record->user->email,
+            'password' => $record->user->password,
         ];
 
         $response = $this->hitLoginAPI($payload);
@@ -382,8 +386,9 @@ class AuthenticationControllerTest extends TestCase
     private function createRecords(): Enumerable
     {
         return $this->factory(Record::class)
-          ->roleOf()
-          ->createMany(\mt_rand(5, 10));
+            ->roleOf()
+            ->createMany(\mt_rand(5, 10))
+        ;
     }
 
     /**

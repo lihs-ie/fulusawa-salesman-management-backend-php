@@ -20,7 +20,6 @@ use App\Infrastructures\Feedback\EloquentFeedbackRepository;
 use App\Infrastructures\Schedule\EloquentScheduleRepository;
 use App\Infrastructures\TransactionHistory\EloquentTransactionHistoryRepository;
 use App\Infrastructures\User\EloquentUserRepository;
-use App\Infrastructures\User\Models\User;
 use App\Infrastructures\Visit\EloquentVisitRepository;
 use Illuminate\Support\ServiceProvider;
 
@@ -49,9 +48,10 @@ class InfrastructureProvider extends ServiceProvider
         $this->app->singleton(AuthenticationRepository::class, function (): AuthenticationRepository {
             return new EloquentAuthenticationRepository(
                 new Authentication(),
-                new User(),
                 \config('sanctum.access_token_ttl'),
                 \config('sanctum.refresh_token_ttl'),
+                \config('sanctum.tokenable_type'),
+                \config('sanctum.hash_salt')
             );
         });
     }
@@ -59,7 +59,5 @@ class InfrastructureProvider extends ServiceProvider
     /**
      * Bootstrap services.
      */
-    public function boot(): void
-    {
-    }
+    public function boot(): void {}
 }

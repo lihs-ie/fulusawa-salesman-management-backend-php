@@ -14,6 +14,8 @@ use Tests\Unit\Http\Requests\API\CommandRequestTest;
  * @group user
  *
  * @coversNothing
+ *
+ * @internal
  */
 class DeleteRequestTest extends TestCase
 {
@@ -41,7 +43,7 @@ class DeleteRequestTest extends TestCase
     protected function createDefaultRoute(): array
     {
         return [
-            'identifier' => Uuid::uuid7()->toString()
+            'identifier' => Uuid::uuid7()->toString(),
         ];
     }
 
@@ -50,7 +52,9 @@ class DeleteRequestTest extends TestCase
      */
     protected function getValidPayloadPatterns(): array
     {
-        return [];
+        return [
+            'default' => [],
+        ];
     }
 
     /**
@@ -80,7 +84,7 @@ class DeleteRequestTest extends TestCase
                 'invalid format' => ['invalid'],
                 'null' => [null],
                 'empty' => [''],
-            ]
+            ],
         ];
     }
 }

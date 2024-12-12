@@ -2,6 +2,7 @@
 
 namespace Tests\Support\Factories\Domains\User;
 
+use App\Domains\Common\ValueObjects\MailAddress;
 use App\Domains\User\Entities\User;
 use App\Domains\User\UserRepository;
 use App\Domains\User\ValueObjects\UserIdentifier;
@@ -101,6 +102,22 @@ class UserRepositoryFactory extends DependencyFactory
                 }
 
                 return $this->instances->get($identifier->value());
+            }
+
+            /**
+             * {@inheritdoc}
+             */
+            public function ofCredentials(MailAddress $email, string $password): User
+            {
+                $target = $this->instances->first(
+                    fn (User $instance): bool => $instance->email()->equals($email) && $instance->password() === $password
+                );
+
+                if (\is_null($target)) {
+                    throw new \OutOfBoundsException('User not found.');
+                }
+
+                return $target;
             }
 
             /**

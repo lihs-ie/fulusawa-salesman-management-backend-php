@@ -7,7 +7,7 @@ use App\Http\Controllers\API\LazyThrowable;
 use App\Http\Requests\API\AbstractRequest;
 
 /**
- * アクセストークン、リフレッシュトークン問わずトークンを送信するリクエスト
+ * アクセストークン、リフレッシュトークン問わずトークンを送信するリクエスト.
  */
 class TokenRequest extends AbstractRequest
 {
@@ -19,9 +19,8 @@ class TokenRequest extends AbstractRequest
     public function rules(): array
     {
         return [
-          'token.type' => ['required', 'string', \sprintf('in:%s,%s', TokenType::ACCESS->name, TokenType::REFRESH->name)],
-          'token.value' => ['required', 'string', 'min:1'],
-          'token.expiresAt' => ['required', 'date'],
+            'type' => ['required', 'string', \sprintf('in:%s,%s', TokenType::ACCESS->name, TokenType::REFRESH->name)],
+            'value' => ['required', 'string', 'min:1'],
         ];
     }
 }

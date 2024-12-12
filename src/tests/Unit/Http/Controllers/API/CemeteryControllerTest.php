@@ -11,7 +11,6 @@ use App\Http\Requests\API\Cemetery\AddRequest;
 use App\Http\Requests\API\Cemetery\DeleteRequest;
 use App\Http\Requests\API\Cemetery\FindRequest;
 use App\Http\Requests\API\Cemetery\ListRequest;
-use App\Http\Requests\API\Cemetery\PersistRequest;
 use App\Http\Requests\API\Cemetery\UpdateRequest;
 use App\UseCases\Cemetery as UseCase;
 use Carbon\CarbonImmutable;
@@ -37,6 +36,8 @@ use Tests\TestCase;
  * @coversNothing
  *
  * @SuppressWarnings(PHPMD.TooManyMethods)
+ *
+ * @internal
  */
 class CemeteryControllerTest extends TestCase
 {
@@ -97,14 +98,15 @@ class CemeteryControllerTest extends TestCase
             'name' => Str::random(\mt_rand(1, 255)),
             'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->toAtomString(),
-            'inHouse' => (bool) \mt_rand(0, 1)
+            'inHouse' => (bool) \mt_rand(0, 1),
         ];
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
             ->expects($this->once())
             ->method('add')
-            ->with(...$payload);
+            ->with(...$payload)
+        ;
 
         $request = $this->createJsonRequest(
             AddRequest::class,
@@ -130,7 +132,7 @@ class CemeteryControllerTest extends TestCase
             'name' => Str::random(\mt_rand(1, 255)),
             'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->toAtomString(),
-            'inHouse' => (bool) \mt_rand(0, 1)
+            'inHouse' => (bool) \mt_rand(0, 1),
         ];
 
         $request = $this->createJsonRequest(
@@ -143,7 +145,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('add')
             ->with(...$payload)
-            ->willThrowException(new \InvalidArgumentException());
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $this->expectException(BadRequestException::class);
 
@@ -163,7 +166,7 @@ class CemeteryControllerTest extends TestCase
             'name' => Str::random(\mt_rand(1, 255)),
             'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->toAtomString(),
-            'inHouse' => (bool) \mt_rand(0, 1)
+            'inHouse' => (bool) \mt_rand(0, 1),
         ];
 
         $request = $this->createJsonRequest(
@@ -176,7 +179,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('add')
             ->with(...$payload)
-            ->willThrowException(new \UnexpectedValueException());
+            ->willThrowException(new \UnexpectedValueException())
+        ;
 
         $this->expectException(BadRequestException::class);
 
@@ -196,7 +200,7 @@ class CemeteryControllerTest extends TestCase
             'name' => Str::random(\mt_rand(1, 255)),
             'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->toAtomString(),
-            'inHouse' => (bool) \mt_rand(0, 1)
+            'inHouse' => (bool) \mt_rand(0, 1),
         ];
 
         $request = $this->createJsonRequest(
@@ -209,7 +213,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('add')
             ->with(...$payload)
-            ->willThrowException(new ConflictException());
+            ->willThrowException(new ConflictException())
+        ;
 
         $this->expectException(ConflictHttpException::class);
 
@@ -231,14 +236,15 @@ class CemeteryControllerTest extends TestCase
             'name' => Str::random(\mt_rand(1, 255)),
             'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->toAtomString(),
-            'inHouse' => (bool) \mt_rand(0, 1)
+            'inHouse' => (bool) \mt_rand(0, 1),
         ];
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
             ->expects($this->once())
             ->method('update')
-            ->with(...$payload);
+            ->with(...$payload)
+        ;
 
         $request = $this->createJsonRequest(
             UpdateRequest::class,
@@ -265,7 +271,7 @@ class CemeteryControllerTest extends TestCase
             'name' => Str::random(\mt_rand(1, 255)),
             'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->toAtomString(),
-            'inHouse' => (bool) \mt_rand(0, 1)
+            'inHouse' => (bool) \mt_rand(0, 1),
         ];
 
         $request = $this->createJsonRequest(
@@ -279,7 +285,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('update')
             ->with(...$payload)
-            ->willThrowException(new \InvalidArgumentException());
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $this->expectException(BadRequestException::class);
 
@@ -299,7 +306,7 @@ class CemeteryControllerTest extends TestCase
             'name' => Str::random(\mt_rand(1, 255)),
             'type' => Collection::make(CemeteryType::cases())->random()->name,
             'construction' => CarbonImmutable::now()->toAtomString(),
-            'inHouse' => (bool) \mt_rand(0, 1)
+            'inHouse' => (bool) \mt_rand(0, 1),
         ];
 
         $request = $this->createJsonRequest(
@@ -313,7 +320,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('update')
             ->with(...$payload)
-            ->willThrowException(new \OutOfBoundsException());
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $this->expectException(NotFoundHttpException::class);
 
@@ -330,14 +338,16 @@ class CemeteryControllerTest extends TestCase
         $expected = $this->instances->map(
             fn (Entity $entity): array => $this->encoder->encode($entity)
         )
-            ->all();
+            ->all()
+        ;
 
         $useCase = $this->createMock(UseCase::class);
         $useCase
             ->expects($this->once())
             ->method('list')
             ->with([])
-            ->willReturn($this->instances);
+            ->willReturn($this->instances)
+        ;
 
         $request = $this->createGetRequest(
             class: ListRequest::class,
@@ -362,7 +372,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('find')
             ->with($target->identifier()->value())
-            ->willReturn($target);
+            ->willReturn($target)
+        ;
 
         $controller = new CemeteryController();
 
@@ -397,7 +408,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('find')
             ->with($identifier)
-            ->willThrowException(new \InvalidArgumentException());
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $this->expectException(BadRequestException::class);
 
@@ -424,7 +436,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('find')
             ->with($missing)
-            ->willThrowException(new \OutOfBoundsException());
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $this->expectException(NotFoundHttpException::class);
 
@@ -450,7 +463,8 @@ class CemeteryControllerTest extends TestCase
         $useCase
             ->expects($this->once())
             ->method('delete')
-            ->with($target->identifier()->value());
+            ->with($target->identifier()->value())
+        ;
 
         $actual = $controller->delete($request, $useCase);
 
@@ -478,7 +492,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('delete')
             ->with($missing)
-            ->willThrowException(new \OutOfBoundsException());
+            ->willThrowException(new \OutOfBoundsException())
+        ;
 
         $this->expectException(NotFoundHttpException::class);
 
@@ -499,7 +514,8 @@ class CemeteryControllerTest extends TestCase
             ->expects($this->once())
             ->method('delete')
             ->with($identifier)
-            ->willThrowException(new \InvalidArgumentException());
+            ->willThrowException(new \InvalidArgumentException())
+        ;
 
         $request = $this->createJsonRequest(
             class: DeleteRequest::class,

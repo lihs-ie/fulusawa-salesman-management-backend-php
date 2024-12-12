@@ -40,16 +40,14 @@ class UseCaseProvider extends ServiceProvider
     /**
      * Bootstrap services.
      */
-    public function boot(): void
-    {
-        //
-    }
+    public function boot(): void {}
 
     private function registerAuthentication(): void
     {
         $this->app->singleton(Authentication::class, function ($app): Authentication {
             return new Authentication(
-                $app->make(AuthenticationRepository::class)
+                $app->make(AuthenticationRepository::class),
+                $app->make(UserRepository::class)
             );
         });
     }
